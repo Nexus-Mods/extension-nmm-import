@@ -127,11 +127,18 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         <Modal.Footer>
           {canCancel ? <Button onClick={this.cancel}>{t('Cancel')}</Button> : null}
           { nextLabel ? (
-            <Button disabled={error !== undefined} onClick={this.next}>{nextLabel}</Button>
+            <Button disabled={this.isNextDisabled()} onClick={this.next}>{nextLabel}</Button>
            ) : null }
         </Modal.Footer>
       </Modal>
     );
+  }
+
+  private isNextDisabled = () => {
+    const { importStep } = this.props;
+    const { error, modsToImport } = this.state;
+    return (error !== undefined)
+        || ((importStep === 'setup') && (modsToImport === undefined));
   }
 
   private renderStep(step: Step): JSX.Element {
