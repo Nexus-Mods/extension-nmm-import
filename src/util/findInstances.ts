@@ -48,6 +48,8 @@ function getVirtualFolder(userConfig: string, gameId: string): string[] {
 function findInstances(gameId: string): Promise<string[][]> {
   const base = path.resolve(remote.app.getPath('appData'), '..', 'local', 'Black_Tree_Gaming');
   return fs.readdirAsync(base)
+    .filter((fileName: string) => fs.statAsync(path.join(base, fileName))
+                                      .then(stat => stat.isDirectory()))
     .then((instances: string[]) =>
       Promise.map(instances, instance => fs.readdirAsync(path.join(base, instance))
         .then((versions: string[]) =>
