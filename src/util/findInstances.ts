@@ -6,6 +6,8 @@ import { fs } from 'vortex-api';
 function convertGameId(input: string): string {
   if (input === 'skyrimse') {
     return 'SkyrimSE';
+  } else if (input === 'falloutnv') {
+    return 'FalloutNV';
   }
   return input.replace(/(?:^|\s)\S/g, (a) => a.toUpperCase());
 }
@@ -55,20 +57,20 @@ function findInstances(gameId: string): Promise<string[][]> {
         .then((versions: string[]) =>
           Promise.map(versions, version =>
             fs.readFileAsync(path.join(base, instance, version, 'user.config'))
-            .then((data: NodeBuffer) =>
-              getVirtualFolder(data.toString(), gameId))))))
-      .then(result => {
-          // remove duplicates, in a case-insensitive way, remove undefined
-          const set = result.reduce((prev: { [key: string]: string[] }, value: string[][]) => {
-              value.forEach(val => {
-                  if (val !== undefined) {
-                      prev[val[0].toUpperCase()] = val;
-                  }
-              });
-              return prev;
-          }, {});
-          return Object.keys(set).map(key => set[key]);
-      })
+              .then((data: NodeBuffer) =>
+                getVirtualFolder(data.toString(), gameId))))))
+    .then(result => {
+      // remove duplicates, in a case-insensitive way, remove undefined
+      const set = result.reduce((prev: { [key: string]: string[] }, value: string[][]) => {
+        value.forEach(val => {
+          if (val !== undefined) {
+            prev[val[0].toUpperCase()] = val;
+          }
+        });
+        return prev;
+      }, {});
+      return Object.keys(set).map(key => set[key]);
+    })
     .catch(err => (err.code === 'ENOENT') ? [] : Promise.reject(err));
 }
 
