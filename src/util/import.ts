@@ -42,6 +42,7 @@ function enhance(sourcePath: string, input: IModEntry): Promise<IModEntry> {
 
       return {
         ...input,
+        archiveId: shortid(),
         categoryId,
       };
     })
@@ -56,7 +57,10 @@ function importMods(api: types.IExtensionApi,
                     mods: IModEntry[],
                     transferArchives: boolean,
                     progress: (mod: string, idx: number) => void): Promise<string[]> {
-  const state = api.store.getState();
+  const store = api.store;
+  const state = store.getState();
+
+  const gameId = selectors.activeGameId(state);
 
   const errors: string[] = [];
 
@@ -66,33 +70,38 @@ function importMods(api: types.IExtensionApi,
       const installPath = selectors.installPath(state);
       const downloadPath = selectors.downloadPath(state);
       return Promise.map(mods, mod => enhance(modsPath, mod))
-      .then(modsEx => Promise.mapSeries(modsEx, (mod, idx) => {
-        trace.log('info', 'transferring', mod);
-        progress(mod.modName, idx);
-        return transferUnpackedMod(mod, sourcePath, alternateSourcePath, installPath, true)
-        .then(failed => {
-          if (failed.length > 0) {
-            trace.log('error', 'Failed to import', failed);
-            errors.push(mod.modName);
-          }
-          if (transferArchives) {
-            return transferArchive(path.join(mod.archivePath, mod.modFilename), downloadPath)
-              .then(failedArchive => {
-                if (failedArchive !== null) {
-                  trace.log('error', 'Failed to import mod archive', failedArchive);
-                  errors.push(mod.modFilename);
-                }
-              });
-          }
-        });
-      })
-        .then(() => {
-          trace.log('info', 'Finished transferring unpacked mod files');
-          const gameId = selectors.activeGameId(state);
-          const profileId = shortid();
-          createProfile(gameId, profileId, 'Imported NMM Profile', api.store.dispatch);
-          addMods(gameId, profileId, modsEx, api.store.dispatch);
-        }));
+        .then(modsEx => Promise.mapSeries(modsEx, (mod, idx) => {
+          trace.log('info', 'transferring', mod);
+          progress(mod.modName, idx);
+          return transferUnpackedMod(mod, sourcePath, alternateSourcePath, installPath, true)
+            .then(failed => {
+              if (failed.length > 0) {
+                trace.log('error', 'Failed to import', failed);
+                errors.push(mod.modName);
+              }
+              if (transferArchives) {
+                const archivePath = path.join(mod.archivePath, mod.modFilename);
+                return fs.statAsync(archivePath)
+                  .then(stats => {
+                    store.dispatch(actions.addLocalDownload(
+                      mod.archiveId, gameId, mod.modFilename, stats.size));
+                    return transferArchive(archivePath, downloadPath);
+                  })
+                  .then(failedArchive => {
+                    if (failedArchive !== null) {
+                      trace.log('error', 'Failed to import mod archive', failedArchive);
+                      errors.push(mod.modFilename);
+                    }
+                  });
+              }
+            });
+        })
+          .then(() => {
+            trace.log('info', 'Finished transferring unpacked mod files');
+            const profileId = shortid();
+            createProfile(gameId, profileId, 'Imported NMM Profile', api.store.dispatch);
+            addMods(gameId, profileId, modsEx, api.store.dispatch);
+          }));
     })
     .then(() => {
       trace.finish();

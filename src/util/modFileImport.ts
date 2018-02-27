@@ -2,7 +2,7 @@ import { IModEntry } from '../types/nmmEntries';
 
 import * as Promise from 'bluebird';
 import * as path from 'path';
-import { fs, log } from 'vortex-api';
+import { actions, fs, log } from 'vortex-api';
 
 /**
  * copy or move a list of mod archives
@@ -12,7 +12,6 @@ import { fs, log } from 'vortex-api';
 export function transferArchive(modArchivePath: string,
                                 destSavePath: string): Promise<string> {
   let failedArchive: string = null;
-
   return fs.copyAsync(modArchivePath, path.join(destSavePath, path.basename(modArchivePath)))
   .catch(err => {
     failedArchive = modArchivePath + ' - ' + err.message;
@@ -48,22 +47,19 @@ export function transferUnpackedMod(mod: IModEntry, nmmVirtualPath: string, nmmL
 
   const failedFiles: string[] = [];
   return Promise.map(Array.from(directories).sort(byLength), dir => fs.ensureDirAsync(dir))
-      .then(() => Promise.map(
-                mod.fileEntries,
-                file => operation(path.join(nmmVirtualPath, file.fileSource),
-                                  path.join(destPath, file.fileDestination))
-                            .catch(err => {
-                              if ((err.code === 'ENOENT') && (nmmLinkPath)) {
-                                operation(path.join(nmmLinkPath, file.fileSource),
-                                path.join(destPath, file.fileDestination))
-                                .catch(linkErr => {
-                                  failedFiles.push(file.fileSource + ' - ' +
-                                  linkErr.message);
-                                });
-                              } else {
-                              failedFiles.push(file.fileSource + ' - ' +
-                                               err.message);
-                              }
-                            })))
-      .then(() => Promise.resolve(failedFiles));
+    .then(() => Promise.map(mod.fileEntries,
+      file => operation(path.join(nmmVirtualPath, file.fileSource),
+        path.join(destPath, file.fileDestination))
+        .catch(err => {
+          if ((err.code === 'ENOENT') && (nmmLinkPath)) {
+            operation(path.join(nmmLinkPath, file.fileSource),
+                      path.join(destPath, file.fileDestination))
+              .catch(linkErr => {
+                failedFiles.push(file.fileSource + ' - ' + linkErr.message);
+              });
+          } else {
+            failedFiles.push(file.fileSource + ' - ' + err.message);
+          }
+        })))
+    .then(() => Promise.resolve(failedFiles));
 }

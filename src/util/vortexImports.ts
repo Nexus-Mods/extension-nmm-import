@@ -31,6 +31,7 @@ export function addMods(gameID: string, profileId: string,
       type: '',
       state: 'installed',
       installationPath: modName,
+      archiveId: modEntry.archiveId,
       attributes: {
         name: modName,
         installTime: new Date(),
