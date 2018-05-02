@@ -37,7 +37,8 @@ function transformFileEntry(
   };
 }
 
-function parseModEntries(
+// exported so it can be unit-tested (ugh)
+export function parseModEntries(
     xmlData: string, mods: IModMap,
     virtualInstallPath: string): Promise<IModEntry[]> {
   const nmmModList: IModEntry[] = [];
