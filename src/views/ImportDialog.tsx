@@ -379,6 +379,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       .then(found => {
         this.nextState.sources = found;
         this.nextState.selectedSource = found[0];
+      })
+      .catch(err => {
+        this.nextState.error = err.message;
       });
   }
 
@@ -398,7 +401,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           return prev;
         }, {});
       })
-      .catch((err) => {
+      .catch(err => {
         this.nextState.error = err.message;
       });
   }
@@ -433,6 +436,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           this.nextState.failedImports = errors;
           this.props.onSetStep('review');
         });
+      })
+      .catch(err => {
+        this.nextState.error = err.message;
       });
   }
 }
