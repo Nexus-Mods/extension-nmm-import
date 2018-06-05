@@ -118,7 +118,7 @@ export function parseModEntries(
 
           const modFilePath = path.join(res.archivePath, res.modFilename);
 
-          return modmeta.genHash(modFilePath).catch(err => null);
+          return modmeta.genHash(modFilePath);
         })
         .then((hashResult: modmetaT.IHashResult) => {
           res.archiveMD5 = hashResult.md5sum;
