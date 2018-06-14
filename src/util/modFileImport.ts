@@ -2,7 +2,7 @@ import { IModEntry } from '../types/nmmEntries';
 
 import * as Promise from 'bluebird';
 import * as path from 'path';
-import { actions, fs, log } from 'vortex-api';
+import { fs } from 'vortex-api';
 
 /**
  * copy or move a list of mod archives
@@ -10,13 +10,8 @@ import { actions, fs, log } from 'vortex-api';
  * @param {string} destSavePath
  */
 export function transferArchive(modArchivePath: string,
-                                destSavePath: string): Promise<string> {
-  let failedArchive: string = null;
-  return fs.copyAsync(modArchivePath, path.join(destSavePath, path.basename(modArchivePath)))
-  .catch(err => {
-    failedArchive = modArchivePath + ' - ' + err.message;
-  })
-  .then(() => Promise.resolve(failedArchive));
+                                destSavePath: string): Promise<void> {
+  return fs.copyAsync(modArchivePath, path.join(destSavePath, path.basename(modArchivePath)));
 }
 
 function byLength(lhs: string, rhs: string): number {

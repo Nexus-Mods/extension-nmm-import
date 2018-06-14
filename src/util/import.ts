@@ -87,11 +87,10 @@ function importMods(api: types.IExtensionApi,
                       mod.archiveId, gameId, mod.modFilename, stats.size));
                     return transferArchive(archivePath, downloadPath);
                   })
-                  .then(failedArchive => {
-                    if (failedArchive !== null) {
-                      trace.log('error', 'Failed to import mod archive', failedArchive);
+                  .catch(err => {
+                      trace.log('error', 'Failed to import mod archive',
+                                archivePath + ' - ' + err.message);
                       errors.push(mod.modFilename);
-                    }
                   });
               }
             });
