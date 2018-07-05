@@ -13,9 +13,7 @@ import {
 import opn = require('opn');
 import * as path from 'path';
 import * as React from 'react';
-import { Alert, Button, Checkbox, DropdownButton, InputGroup, MenuItem,
-  ProgressBar, SplitButton,
-} from 'react-bootstrap';
+import { Alert, Button, MenuItem, ProgressBar, SplitButton } from 'react-bootstrap';
 import { translate } from 'react-i18next';
 import { connect } from 'react-redux';
 import * as Redux from 'redux';
