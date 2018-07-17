@@ -1,9 +1,9 @@
-import { IFileEntry, IModEntry } from './types/nmmEntries';
+import { IModEntry } from './types/nmmEntries';
 
 import * as I18next from 'i18next';
 import * as React from 'react';
-import { TableDateTimeFilter, TableNumericFilter,
-  TableTextFilter, tooltip, types, util } from 'vortex-api';
+import { TableNumericFilter,
+  TableTextFilter, tooltip, types } from 'vortex-api';
 
 export const MOD_ID: types.ITableAttribute = {
   id: 'id',

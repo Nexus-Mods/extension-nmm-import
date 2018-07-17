@@ -1,6 +1,6 @@
 import { setImportStep } from '../actions/session';
 
-import { IFileEntry, IModEntry } from '../types/nmmEntries';
+import { IModEntry } from '../types/nmmEntries';
 import findInstances from '../util/findInstances';
 import importMods from '../util/import';
 import parseNMMConfigFile from '../util/nmmVirtualConfigParser';
@@ -18,7 +18,7 @@ import { translate } from 'react-i18next';
 import { connect } from 'react-redux';
 import * as Redux from 'redux';
 import { ComponentEx, Icon, Modal, selectors, Spinner, Steps, Table,
-         Toggle, tooltip, types } from 'vortex-api';
+         Toggle, types } from 'vortex-api';
 
 type Step = 'start' | 'setup' | 'working' | 'review';
 
@@ -117,7 +117,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       <Modal id='import-dialog' show={importStep !== undefined} onHide={this.nop}>
         <Modal.Header>
           <Modal.Title>{t('Nexus Mod Manager (NMM) Import Tool')}</Modal.Title>
-          {this.renderStep(importStep)}
+          {this.renderCurrentStep()}
         </Modal.Header>
         <Modal.Body style={{ height: '60vh', display: 'flex', flexDirection: 'column' }}>
           {error !== undefined ? <Alert>{error}</Alert> : this.renderContent(importStep)}
@@ -139,7 +139,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         || ((importStep === 'setup') && (modsToImport === undefined));
   }
 
-  private renderStep(step: Step): JSX.Element {
+  private renderCurrentStep(): JSX.Element {
     const { t, importStep } = this.props;
 
     return (
