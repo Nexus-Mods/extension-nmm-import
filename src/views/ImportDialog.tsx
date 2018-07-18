@@ -10,7 +10,6 @@ import {
   FILENAME, FILES, LOCAL, MOD_ID, MOD_NAME, MOD_VERSION,
 } from '../importedModAttributes';
 
-import opn = require('opn');
 import * as path from 'path';
 import * as React from 'react';
 import { Alert, Button, MenuItem, ProgressBar, SplitButton } from 'react-bootstrap';
@@ -18,7 +17,7 @@ import { translate } from 'react-i18next';
 import { connect } from 'react-redux';
 import * as Redux from 'redux';
 import { ComponentEx, Icon, Modal, selectors, Spinner, Steps, Table,
-         Toggle, types } from 'vortex-api';
+         Toggle, types, util } from 'vortex-api';
 
 type Step = 'start' | 'setup' | 'working' | 'review';
 
@@ -342,7 +341,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private openLog = (evt) => {
     evt.preventDefault();
-    opn(this.mTrace.logFilePath).catch(err => undefined);
+    (util as any).opn(this.mTrace.logFilePath).catch(err => undefined);
   }
 
   private nextLabel(step: Step): string {
