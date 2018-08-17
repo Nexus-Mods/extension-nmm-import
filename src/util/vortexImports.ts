@@ -1,8 +1,7 @@
-import { IFileEntry, IModEntry } from '../types/nmmEntries';
+import { IModEntry } from '../types/nmmEntries';
 
 import * as Promise from 'bluebird';
-import * as path from 'path';
-import * as React from 'react';
+import * as Redux from 'redux';
 import { actions, log, types } from 'vortex-api';
 
 interface IVortexMod {
