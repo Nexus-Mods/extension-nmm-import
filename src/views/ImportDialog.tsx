@@ -55,7 +55,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
     this.initState({
       sources: undefined,
-      importArchives: false,
+      importArchives: true,
       modsToImport: undefined,
       selectedSource: [],
       error: undefined,
