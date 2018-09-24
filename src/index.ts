@@ -16,7 +16,7 @@ function init(context: types.IExtensionContext): boolean {
   context.registerDialog('nmm-import', ImportDialog);
 
   context.registerReducer(['session', 'modimport'], sessionReducer);
-  context.registerAction('mod-icons', 115, 'import', {}, 'Import from NMM', () => {
+  context.registerAction('mod-icons', 115, 'import', {}, 'Import From NMM', () => {
     context.api.store.dispatch(setImportStep('start'));
   });
 
