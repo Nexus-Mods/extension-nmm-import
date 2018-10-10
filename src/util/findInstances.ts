@@ -18,7 +18,7 @@ function getVirtualFolder(userConfig: string, gameId: string): string[] {
   const xmlDoc = parser.parseFromString(userConfig, 'text/xml');
 
   let item = xmlDoc
-    .querySelector(`setting[name="VirtualFolder"] item[modeId="${convertGameId(gameId)}"] string`);
+    .querySelector(`setting[name="VirtualFolder"] item[modeId="${convertGameId(gameId)}" i] string`);
 
   if (item === null) {
     return undefined;
@@ -28,14 +28,14 @@ function getVirtualFolder(userConfig: string, gameId: string): string[] {
   let nmmLinkPath = '';
 
   item = xmlDoc
-  .querySelector(`setting[name="HDLinkFolder"] item[modeId="${convertGameId(gameId)}"] string`);
+  .querySelector(`setting[name="HDLinkFolder"] item[modeId="${convertGameId(gameId)}" i] string`);
 
   if (item !== null) {
     nmmLinkPath = item.textContent;
   }
 
   item = xmlDoc
-  .querySelector(`setting[name="ModFolder"] item[modeId="${convertGameId(gameId)}"] string`);
+  .querySelector(`setting[name="ModFolder"] item[modeId="${convertGameId(gameId)}" i] string`);
 
   if (item === null) {
     return undefined;
