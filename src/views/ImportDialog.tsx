@@ -5,6 +5,7 @@ import findInstances from '../util/findInstances';
 import importMods from '../util/import';
 import parseNMMConfigFile from '../util/nmmVirtualConfigParser';
 import TraceImport from '../util/TraceImport';
+import * as winapi from 'winapi-bindings';
 
 import {
   FILENAME, FILES, LOCAL, MOD_ID, MOD_NAME, MOD_VERSION,
@@ -16,8 +17,10 @@ import { Alert, Button, MenuItem, ProgressBar, SplitButton } from 'react-bootstr
 import { translate } from 'react-i18next';
 import { connect } from 'react-redux';
 import * as Redux from 'redux';
-import { ComponentEx, Icon, Modal, selectors, Spinner, Steps, Table,
+import { ComponentEx, Icon, Modal, selectors, Spinner, Steps, Table, fs,
          Toggle, types, util } from 'vortex-api';
+
+import * as Promise from 'bluebird';
 
 type Step = 'start' | 'setup' | 'working' | 'review';
 
@@ -42,6 +45,10 @@ interface IComponentState {
   counter: number;
   progress: { mod: string, pos: number };
   failedImports: string[];
+
+  isCalculating: { [id: string]: boolean };
+  totalNeededBytes: number;
+  totalFreeBytes: number;
 }
 
 class ImportDialog extends ComponentEx<IProps, IComponentState> {
@@ -61,6 +68,13 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       error: undefined,
       importEnabled: {},
       counter: 0,
+      isCalculating: {
+        onChange: false,
+        toggleArchive: false,
+        startUp: false,
+      },
+      totalNeededBytes: 0,
+      totalFreeBytes: 0,
       progress: undefined,
       failedImports: [],
     });
@@ -85,10 +99,66 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           this.nextState.importEnabled[mod.modFilename] = (value === undefined)
             ? !(this.state.importEnabled[mod.modFilename] !== false)
             : value === 'yes';
+            this.onModEnabled(mod);
           ++this.nextState.counter;
         },
       },
     };
+  }
+
+  private onModEnabled(mod: IModEntry): void {
+    const { importArchives } = this.nextState;
+    const getArchiveSize = (mod) => {
+      return importArchives ? this.calculateArchiveSize(mod) : 0;
+    }
+    
+    if (this.state.importEnabled[mod.modFilename] !== this.nextState.importEnabled[mod.modFilename] 
+      || false === this.isBusyCalculating()) {
+      this.nextState.isCalculating['onChange'] = true
+      let total = 0;
+      Promise.all([this.calculateModFilesSize(mod), getArchiveSize(mod)])
+      .then(results => {
+          total = (results[0] + results[1]);
+          total = this.nextState.importEnabled[mod.modFilename] ? total : total * -1;
+          return total;
+      }).finally(() => {
+        this.nextState.isCalculating['onChange'] = false;
+        return this.nextState.totalNeededBytes += total
+      });
+    }
+  }
+
+  private calculateTotalBytesNeeded(): Promise<number> {
+    const { modsToImport } = this.state;
+    const modList = Object.keys(modsToImport).map(id => modsToImport[id]);
+    let total = 0;
+
+    return new Promise((resolve, reject) => {
+      return Promise.map(modList, mod => {
+        return Promise.all([this.calculateModFilesSize(mod), 
+          this.calculateArchiveSize(mod)]).then(results => {
+            return results[0] + results[1];
+        }).then(val => total += val);
+      }).then(() => resolve(total)).catch(err => reject(err));
+    })
+  }
+
+  private calculateArchiveSize(mod: IModEntry): Promise<number> {
+    return fs.statAsync(path.join(mod.archivePath, mod.modFilename))
+    .then(stats => {
+      return Promise.resolve(stats.size);
+    }).catch(err => Promise.reject(err));
+  }
+
+  private calculateModFilesSize(mod: IModEntry): Promise<number> {
+    const { selectedSource } = this.state;
+    return Promise.map(mod.fileEntries, file => {
+      const filePath = path.join(selectedSource[0], 'VirtualInstall', file.fileSource);
+      return fs.statAsync(filePath);
+    }).then(stats => {
+      let sum = stats.reduce((previous, stat) => previous + stat.size, 0);
+      return Promise.resolve(sum);
+    }).catch(err => Promise.reject(err));
   }
 
   public componentWillReceiveProps(newProps: IProps) {
@@ -105,7 +175,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   public render(): JSX.Element {
     const { t, importStep } = this.props;
-    const { error, sources } = this.state;
+    const { error, sources, totalNeededBytes, totalFreeBytes } = this.state;
 
     const canCancel = ['start', 'setup'].indexOf(importStep) !== -1;
     const nextLabel = ((sources !== undefined) && (sources.length > 0))
@@ -122,6 +192,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           {error !== undefined ? <Alert>{error}</Alert> : this.renderContent(importStep)}
         </Modal.Body>
         <Modal.Footer>
+          <p>Total Bytes Needed / Total Free Bytes</p>
+          <p>{totalNeededBytes} / {totalFreeBytes}</p>
+          <p style={{ color: 'red' }}>{ totalNeededBytes > totalFreeBytes ? 'Not enough disk space at target location!' : ''}</p>
           {canCancel ? <Button onClick={this.cancel}>{t('Cancel')}</Button> : null}
           { nextLabel ? (
             <Button disabled={this.isNextDisabled()} onClick={this.next}>{nextLabel}</Button>
@@ -131,11 +204,22 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     );
   }
 
+  private isBusyCalculating(): boolean {
+    const { isCalculating } = this.state;
+    const calcList = Object.keys(isCalculating).map(id => isCalculating[id]);
+    if (calcList.find(calc => calc === true) !== undefined) {
+      return true;
+    }
+    return false;
+  }
+
   private isNextDisabled = () => {
     const { importStep } = this.props;
-    const { error, modsToImport } = this.state;
+    const { error, modsToImport, totalNeededBytes, totalFreeBytes, isCalculating } = this.state;
     return (error !== undefined)
-        || ((importStep === 'setup') && (modsToImport === undefined));
+        || ((importStep === 'setup') && (modsToImport === undefined)
+        || ((importStep === 'setup') && (this.isBusyCalculating()))
+        || ((importStep === 'setup') && (totalNeededBytes > totalFreeBytes)));
   }
 
   private renderCurrentStep(): JSX.Element {
@@ -250,9 +334,26 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private toggleArchiveImport = () => {
-    const {importArchives} = this.state;
+    const { importArchives } = this.state;
+    const newVal = !importArchives;
+    this.nextState.isCalculating['toggleArchive'] = true;
+    this.totalArchiveSize().then(size => {
+      size = newVal ? size : size * -1;
+      this.nextState.isCalculating['toggleArchive'] = false;
+      return this.nextState.totalNeededBytes += size;
+    })
 
-    this.nextState.importArchives = !importArchives;
+    this.nextState.importArchives = newVal;
+  }
+
+  private totalArchiveSize(): Promise<number> {
+    const { modsToImport, importEnabled } = this.state;
+    const modList = Object.keys(modsToImport).map(id => modsToImport[id]);
+    return Promise.map(modList, mod =>
+      importEnabled[mod.modFilename] ? this.calculateArchiveSize(mod) : 0
+    ).then(results => {
+      return results.reduce((previous, res) => previous + res, 0);
+    })
   }
 
   private renderSelectMods(): JSX.Element {
@@ -376,6 +477,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       .then(found => {
         this.nextState.sources = found;
         this.nextState.selectedSource = found[0];
+        this.nextState.totalFreeBytes = winapi.GetDiskFreeSpaceEx(this.nextState.selectedSource[2]).free;
       })
       .catch(err => {
         this.nextState.error = err.message;
@@ -400,6 +502,12 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       })
       .catch(err => {
         this.nextState.error = err.message;
+      }).finally(() => {
+        this.nextState.isCalculating['startUp'] = true;
+        this.calculateTotalBytesNeeded().then(res => {
+          this.nextState.totalNeededBytes = res;
+          this.nextState.isCalculating['startUp'] = false;
+        }).catch(err => err);
       });
   }
 
