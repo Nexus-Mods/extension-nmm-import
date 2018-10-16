@@ -221,11 +221,18 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       ? this.nextLabel(importStep)
       : undefined;
 
-    const memoryInfo = () => (
+    const capacityInfo = () => (
       <div>
-          <p>Total Bytes Needed / Total Bytes Free</p>
-          <p>{totalNeededBytes} / {totalFreeBytes}</p>
-          <p style={{ color: 'red' }}>{ totalNeededBytes > totalFreeBytes ? 'Not enough disk space at target location!' : ''}</p>
+          <p className={totalNeededBytes > totalFreeBytes ? 'disk-space-insufficient' : 'disk-space-sufficient'}>
+            {
+            t('Size required: {{required}} / {{available}}', {
+              replace: {
+                required: util.bytesToString(totalNeededBytes),
+                available: util.bytesToString(totalFreeBytes),
+              },
+            })
+            }
+          </p>
       </div>
     );
 
@@ -239,7 +246,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           {error !== undefined ? <Alert>{error}</Alert> : this.renderContent(importStep)}
         </Modal.Body>
         <Modal.Footer>
-          {importStep === 'setup' && memoryInfo()}
+          {importStep === 'setup' && capacityInfo()}
           {canCancel ? <Button onClick={this.cancel}>{t('Cancel')}</Button> : null}
           { nextLabel ? (
             <Button disabled={this.isNextDisabled()} onClick={this.next}>{nextLabel}</Button>
