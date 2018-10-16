@@ -1,4 +1,4 @@
-import { transferArchive, transferUnpackedMod} from '../util/modFileImport';
+import { transferArchive, transferUnpackedMod} from './modFileImport';
 
 import {IModEntry} from '../types/nmmEntries';
 import TraceImport from './TraceImport';

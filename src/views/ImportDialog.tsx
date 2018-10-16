@@ -5,7 +5,7 @@ import findInstances from '../util/findInstances';
 import importMods from '../util/import';
 import parseNMMConfigFile from '../util/nmmVirtualConfigParser';
 import TraceImport from '../util/TraceImport';
-//import * as winapi from 'winapi-bindings';
+import * as winapi from 'winapi-bindings';
 
 import {
   FILENAME, FILES, LOCAL, MOD_ID, MOD_NAME, MOD_VERSION,
@@ -516,7 +516,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       .then(found => {
         this.nextState.sources = found;
         this.nextState.selectedSource = found[0];
-        //this.nextState.totalFreeBytes = winapi.GetDiskFreeSpaceEx(this.nextState.selectedSource[2]).free;
+        this.nextState.totalFreeBytes = winapi.GetDiskFreeSpaceEx(this.nextState.selectedSource[2]).free;
       })
       .catch(err => {
         this.nextState.error = err.message;

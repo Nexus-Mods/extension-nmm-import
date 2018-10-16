@@ -4,7 +4,7 @@ import * as Promise from 'bluebird';
 import * as modmetaT from 'modmeta-db';
 import * as path from 'path';
 import { fs, log, types, util } from 'vortex-api';
-const modmeta = util.lazyRequire<typeof modmetaT>('modmeta-db');
+import * as modmeta from 'modmeta-db';
 
 interface IModMap {
   [modId: string]: types.IMod;
@@ -103,7 +103,7 @@ export function parseModEntries(
         .then(() => {
           let fileLinks: NodeListOf<Element>;
           try {
-            fileLinks = modInfo.getElementsByTagName('fileLink');
+            fileLinks = modInfo.getElementsByTagName('fileLink') as any;
           } catch (err) {
             log('warn', 'VirtualModConfig.xml has no file links for mod',
                 { archiveName, error: err.message });
