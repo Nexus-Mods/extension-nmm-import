@@ -197,15 +197,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
         modFiles.totalNeededBytes += modified[0];
         archiveFiles.totalNeededBytes += modified[1];
-        
-        // Temporary hack.
-        if (modFiles.totalNeededBytes < 0 || archiveFiles.totalNeededBytes < 0) {
-          const { modsToImport } = this.state;
-          let modList = Object.keys(modsToImport)
-            .map(id => modsToImport[id])
-            .filter(entry => this.isModEnabled(entry));
-          this.setTotalBytesNeeded(modList);
-        }
 
         this.nextState.isCalculating['onChange'] = false;
         return resolve();
