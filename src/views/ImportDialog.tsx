@@ -277,7 +277,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       : undefined;
 
     let merged: ICapacityInfo = undefined;
-    if(this.isIdenticalRootPath()) {
+    if (this.isIdenticalRootPath()) {
       merged = {
         desc: '',
         rootPath: capacityInformation.modFiles.rootPath,
@@ -624,9 +624,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const { modFiles, archiveFiles } = this.nextState.capacityInformation;
     this.nextState.error = undefined;
 
-    modFiles.rootPath = path.parse(this.props.installPath).root;
+    modFiles.rootPath = winapi.GetVolumePathName(this.props.installPath);
     modFiles.totalFreeBytes = winapi.GetDiskFreeSpaceEx(this.props.installPath).free;
-    archiveFiles.rootPath = path.parse(this.props.downloadPath).root;
+    archiveFiles.rootPath = winapi.GetVolumePathName(this.props.downloadPath);
     archiveFiles.totalFreeBytes = winapi.GetDiskFreeSpaceEx(this.props.downloadPath).free;
 
     findInstances(this.props.gameId)
