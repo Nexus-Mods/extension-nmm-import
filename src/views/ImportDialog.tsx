@@ -107,7 +107,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       this.nextState.importEnabled[mod.modFilename] = (value === undefined)
       ? !(this.state.importEnabled[mod.modFilename] !== false)
       : value === 'yes';
-      this.onImportChange(mod);
+      // Avoid calculating for mods that are already managed by Vortex.
+      if (!mod.isAlreadyManaged) {
+        this.onImportChange(mod);
+      }
       ++this.nextState.counter;
       return null;
     }, 100);
