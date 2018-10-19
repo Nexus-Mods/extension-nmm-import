@@ -57,6 +57,7 @@ interface IComponentState {
 
   isCalculating: { [id: string]: boolean };
   capacityInformation: { [id:string]: ICapacityInfo };
+  hasCalculationErrors: boolean;
 }
 
 class ImportDialog extends ComponentEx<IProps, IComponentState> {
@@ -77,6 +78,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       error: undefined,
       importEnabled: {},
       counter: 0,
+      hasCalculationErrors: false,
       isCalculating: {
         onChange: false,
         toggleArchive: false,
@@ -107,12 +109,16 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       this.nextState.importEnabled[mod.modFilename] = (value === undefined)
       ? !(this.state.importEnabled[mod.modFilename] !== false)
       : value === 'yes';
+      ++this.nextState.counter;
       // Avoid calculating for mods that are already managed by Vortex.
       if (!mod.isAlreadyManaged) {
-        this.onImportChange(mod);
+        return this.onImportChange(mod).catch(err => {
+          this.nextState.hasCalculationErrors = true;
+          return Promise.reject(err);
+        });
+      } else {
+        return null;
       }
-      ++this.nextState.counter;
-      return null;
     }, 100);
 
     this.mStatus = {
@@ -132,9 +138,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           { key: 'no', text: 'Don\'t import' },
         ],
         onChangeValue: (mod: IModEntry, value: any) => {
-          this.mDebouncer.schedule(err => {
+          this.mDebouncer.schedule((err) => {
             if (err) {
-              this.context.api.showErrorNotification(`Unable to display capacity information for ${mod.modName} onChange`, err);
+              this.context.api.showErrorNotification('Failed to validate mod file', err, { allowReport: (err as any).code !== 'ENOENT' })
             }
           }, mod, value);
         },
@@ -155,13 +161,17 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         archiveFiles.totalNeededBytes += size;
         this.nextState.isCalculating['toggleArchive'] = false;
         return resolve();
-      }).catch(err => reject(err));
+      }).catch(err => {
+        this.nextState.hasCalculationErrors = true
+        return reject(err); 
+      });
     });
   }
 
   private onStartUp(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const { modsToImport } = this.state;
+      this.nextState.hasCalculationErrors = false;
       let modList = Object.keys(modsToImport)
         .map(id => modsToImport[id])
         .filter(entry => this.isModEnabled(entry));
@@ -170,7 +180,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       this.setTotalBytesNeeded(modList).then(() => {
         this.nextState.isCalculating['startUp'] = false
         return resolve();
-      }).catch(err => reject(err));
+      }).catch(err => {
+        this.nextState.hasCalculationErrors = true;
+        return reject(err)
+      });
     });
   }
 
@@ -206,22 +219,20 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     modFiles.totalNeededBytes = 0;
     archiveFiles.totalNeededBytes = 0;
 
-    return new Promise((resolve, reject) => {
       return Promise.map(modList, mod => {
         return Promise.all([this.calculateModFilesSize(mod), 
           this.calculateArchiveSize(mod)]).then(results => {
             modFiles.totalNeededBytes += results[0];
             archiveFiles.totalNeededBytes += results[1];
         })
-      }).then(() => resolve()).catch(err => reject(err));
-    })
+      }).then(() => Promise.resolve()).catch(err => Promise.reject(err));
   }
 
   private calculateArchiveSize(mod: IModEntry): Promise<number> {
     return fs.statAsync(path.join(mod.archivePath, mod.modFilename))
     .then(stats => {
       return Promise.resolve(stats.size);
-    }).catch(err => Promise.reject(err));
+    })
   }
 
   private calculateModFilesSize(mod: IModEntry): Promise<number> {
@@ -232,7 +243,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     }).then(stats => {
       let sum = stats.reduce((previous, stat) => previous + stat.size, 0);
       return Promise.resolve(sum);
-    }).catch(err => Promise.reject(err));
+    })
   }
 
   public componentWillReceiveProps(newProps: IProps) {
@@ -269,7 +280,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   public render(): JSX.Element {
     const { t, importStep } = this.props;
-    const { error, sources, capacityInformation, importArchives } = this.state;
+    const { error, sources, capacityInformation, importArchives, hasCalculationErrors } = this.state;
 
     const canCancel = ['start', 'setup'].indexOf(importStep) !== -1;
     const nextLabel = ((sources !== undefined) && (sources.length > 0))
@@ -298,6 +309,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         <Modal.Footer>
           {importStep === 'setup' && (merged !== undefined ? this.getCapacityInfo(merged) : this.getCapacityInfo(capacityInformation.modFiles))}
           {importStep === 'setup' && importArchives && !this.isIdenticalRootPath() && this.getCapacityInfo(capacityInformation.archiveFiles)}
+          {importStep === 'setup' && hasCalculationErrors && <p className='calculation-error'>Vortex cannot validate NMM's mod/archive files - this usually occurs when the NMM configuration is corrupt</p>}
           {canCancel ? <Button onClick={this.cancel}>{t('Cancel')}</Button> : null}
           { nextLabel ? (
             <Button disabled={this.isNextDisabled()} onClick={this.next}>{nextLabel}</Button>
@@ -483,7 +495,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   private toggleArchiveImport = () => {
     const { importArchives } = this.state;
     const newVal = !importArchives;
-    this.onToggleArchive(newVal).catch(err => this.context.api.showErrorNotification('Failed to calculate archive size', err));
+    this.onToggleArchive(newVal).catch(err => this.context.api.showErrorNotification('Failed to validate archive file', err, { allowReport: (err as any).code !== 'ENOENT' }));
     this.nextState.importArchives = newVal;
   }
 
@@ -658,7 +670,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       .catch(err => {
         this.nextState.error = err.message;
       }).finally(() => {
-        this.onStartUp().catch(err => this.context.api.showErrorNotification('StartUp sequence failed to calculate bytes required', err));
+        this.onStartUp().catch(err => this.context.api.showErrorNotification('StartUp sequence failed to calculate bytes required', err, { allowReport: (err as any).code !== 'ENOENT' }));
       });
   }
 
