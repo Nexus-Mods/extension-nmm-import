@@ -19,7 +19,9 @@ function getInner(ele: Element): string {
   return undefined;
 }
 
-function enhance(sourcePath: string, input: IModEntry): Promise<IModEntry> {
+function enhance(sourcePath: string, input: IModEntry,
+                 nmmCategories: { [id: string]: string },
+                 vortexCategory: (name: string) => string): Promise<IModEntry> {
   // this id is currently identically to what we store as the vortexId but I don't want
   // to rely on that always being the case
   const id = path.basename(input.modFilename, path.extname(input.modFilename));
@@ -33,12 +35,15 @@ function enhance(sourcePath: string, input: IModEntry): Promise<IModEntry> {
     .then(infoXmlData => {
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(infoXmlData.toString(), 'text/xml');
-      const category = getInner(xmlDoc.querySelector('fomod CustomCategoryId'))
-                    || getInner(xmlDoc.querySelector('fomod CategoryId'));
+      let categoryId = getInner(xmlDoc.querySelector('fomod CustomCategoryId'))
+                      || getInner(xmlDoc.querySelector('fomod CategoryId'));
+      const category = categoryId !== undefined ? nmmCategories[categoryId] : undefined;
 
-      const categoryId = category !== undefined
-        ? parseInt(category, 10)
-        : undefined;
+      if (category !== undefined) {
+        categoryId = vortexCategory(category);
+      } else {
+        categoryId = undefined;
+      }
 
       return {
         ...input,
@@ -56,11 +61,35 @@ function importMods(api: types.IExtensionApi,
                     modsPath: string,
                     mods: IModEntry[],
                     transferArchives: boolean,
+                    categories: { [id: string]: string },
                     progress: (mod: string, idx: number) => void): Promise<string[]> {
   const store = api.store;
-  const state = store.getState();
+  const state: types.IState = store.getState();
 
   const gameId = selectors.activeGameId(state);
+
+  const vortexCategories = state.persistent.categories[gameId];
+
+  const makeVortexCategory = (name: string): string => {
+    const existing = Object.keys(vortexCategories).find(key => vortexCategories[key].name === name);
+    if (existing !== undefined) {
+      return existing;
+    }
+
+    if (vortexCategories['nmm_0'] === undefined) {
+      trace.log('info', 'Adding root for imported NMM categories');
+      store.dispatch(actions.setCategory(gameId, 'nmm_0', { name: 'Imported from NMM', order: 0, parentCategory: undefined }))
+    }
+
+    let id = 1;
+    while (vortexCategories[`nmm_${id}`] !== undefined) {
+      ++id;
+    }
+
+    trace.log('info', 'NMM category couldn\'t be matched, importing', name);
+    store.dispatch(actions.setCategory(gameId, `nmm_${id}`, { name, order: 0, parentCategory: 'nmm_0' }))
+    return `nmm_${id}`;
+  }
 
   const errors: string[] = [];
 
@@ -69,7 +98,7 @@ function importMods(api: types.IExtensionApi,
       trace.log('info', 'transfer unpacked mods files');
       const installPath = selectors.installPath(state);
       const downloadPath = selectors.downloadPath(state);
-      return Promise.map(mods, mod => enhance(modsPath, mod))
+      return Promise.map(mods, mod => enhance(modsPath, mod, categories, makeVortexCategory))
         .then(modsEx => Promise.mapSeries(modsEx, (mod, idx) => {
           trace.log('info', 'transferring', mod);
           progress(mod.modName, idx);

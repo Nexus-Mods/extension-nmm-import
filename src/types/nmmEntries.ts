@@ -13,7 +13,7 @@ export interface IModEntry {
   isAlreadyManaged: boolean;
   fileEntries: IFileEntry[];
   archiveId?: string;
-  categoryId?: number;
+  categoryId?: string;
 }
 
 export interface IFileEntry {

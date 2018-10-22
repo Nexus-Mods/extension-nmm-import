@@ -1,6 +1,7 @@
 import { setImportStep } from '../actions/session';
 
 import { IModEntry } from '../types/nmmEntries';
+import { getCategories } from '../util/categories';
 import findInstances from '../util/findInstances';
 import importMods from '../util/import';
 import parseNMMConfigFile from '../util/nmmVirtualConfigParser';
@@ -690,14 +691,16 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const virtualInstallPath = path.join(selectedSource[0], 'VirtualInstall');
     const nmmLinkPath = (selectedSource[1]) ? path.join(selectedSource[1], gameId, 'NMMLink') : '';
     const modsPath = selectedSource[2];
+    const categoriesPath = path.join(selectedSource[0], 'categories', 'Categories.xml');
 
     this.mTrace.initDirectory(selectedSource[0])
-      .then(() => {
+      .then(() => getCategories(categoriesPath))
+      .then(categories => {
         this.mTrace.log('info', 'NMM Mods (count): ' + modList.length +
           ' - Importing (count):' + enabledMods.length);
         importMods(this.context.api, this.mTrace,
         virtualInstallPath, nmmLinkPath, modsPath, enabledMods,
-        importArchives, (mod: string, pos: number) => {
+        importArchives, categories, (mod: string, pos: number) => {
           this.nextState.progress = { mod, pos };
         })
         .then(errors => {
