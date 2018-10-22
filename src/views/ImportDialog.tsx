@@ -172,6 +172,11 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   private onStartUp(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const { modsToImport } = this.state;
+      if (modsToImport === undefined) {
+        // happens if there are no NMM mods for this game
+        return Promise.resolve();
+      }
+
       this.nextState.hasCalculationErrors = false;
       let modList = Object.keys(modsToImport)
         .map(id => modsToImport[id])
@@ -479,7 +484,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           + 'to import here:')}
         <SplitButton
           id='import-select-source'
-          title={selectedSource[0] || ''}
+          title={selectedSource !== undefined ? selectedSource[0] || '' : ''}
           onSelect={this.selectSource}
           style={{ marginLeft: 15 }}
         >
