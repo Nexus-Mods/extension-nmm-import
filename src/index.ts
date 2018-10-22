@@ -8,9 +8,14 @@ import { fs, types } from 'vortex-api';
 
 const app = appIn !== undefined ? appIn : remote.app;
 
+let appPath: string;
+
 function nmmConfigExists(): boolean {
   try {
-    const base = path.resolve(app.getPath('appData'), '..', 'local', 'Black_Tree_Gaming');
+    if (appPath === undefined) {
+      appPath = app.getPath('appData');
+    }
+    const base = path.resolve(appPath, '..', 'local', 'Black_Tree_Gaming');
     fs.statSync(base);
     return true;
   } catch (err) {
