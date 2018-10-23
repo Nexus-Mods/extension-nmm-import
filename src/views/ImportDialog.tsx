@@ -103,23 +103,14 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       failedImports: [],
     });
 
-    this.mDebouncer = new util.Debouncer((mod, value) => {
+    this.mDebouncer = new util.Debouncer((mod) => {
       if (mod === undefined) {
         return null;
       }
-      this.nextState.importEnabled[mod.modFilename] = (value === undefined)
-      ? !(this.state.importEnabled[mod.modFilename] !== false)
-      : value === 'yes';
-      ++this.nextState.counter;
-      // Avoid calculating for mods that are already managed by Vortex.
-      if (!mod.isAlreadyManaged) {
-        return this.onImportChange(mod).catch(err => {
-          this.nextState.hasCalculationErrors = true;
-          return Promise.reject(err);
-        });
-      } else {
-        return null;
-      }
+      return this.onImportChange(mod).catch(err => {
+        this.nextState.hasCalculationErrors = true;
+        return Promise.reject(err);
+      });
     }, 100);
 
     this.mStatus = {
@@ -139,11 +130,22 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           { key: 'no', text: 'Don\'t import' },
         ],
         onChangeValue: (mod: IModEntry, value: any) => {
-          this.mDebouncer.schedule((err) => {
-            if (err) {
-              this.context.api.showErrorNotification('Failed to validate mod file', err, { allowReport: (err as any).code !== 'ENOENT' })
-            }
-          }, mod, value);
+          this.nextState.importEnabled[mod.modFilename] = (value === undefined)
+            ? mod.isAlreadyManaged
+               ? !(this.state.importEnabled[mod.modFilename] === true)
+               : !(this.state.importEnabled[mod.modFilename] !== false)
+            : value === 'yes';
+          ++this.nextState.counter;
+          // Avoid calculating for mods that are already managed by Vortex.
+          if (!mod.isAlreadyManaged) {
+            this.mDebouncer.schedule(err => {
+              if (err) {
+                this.context.api.showErrorNotification('Failed to validate mod file', err, { allowReport: (err as any).code !== 'ENOENT' })
+              }
+            }, mod);
+          } else {
+            return null;
+          }
         },
       },
     };
