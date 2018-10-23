@@ -180,7 +180,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       this.nextState.hasCalculationErrors = false;
       let modList = Object.keys(modsToImport)
         .map(id => modsToImport[id])
-        .filter(entry => this.isModEnabled(entry));
+        .filter(entry => this.isModEnabled(entry) && !entry.isAlreadyManaged);
 
       this.nextState.isCalculating['startUp'] = true;
       this.setTotalBytesNeeded(modList).then(() => {
@@ -507,7 +507,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private totalArchiveSize(): Promise<number> {
     const { modsToImport } = this.state;
-    const modList = Object.keys(modsToImport).map(id => modsToImport[id]).filter(mod => this.isModEnabled(mod));
+    const modList = Object.keys(modsToImport).map(id => modsToImport[id]).filter(mod => this.isModEnabled(mod) && !mod.isAlreadyManaged);
     return Promise.map(modList, mod => {
       return this.calculateArchiveSize(mod);
     }).then(results => {
