@@ -87,13 +87,13 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       },
       capacityInformation: {
         modFiles: {
-          desc: 'Mod Files: ',
+          desc: 'Mod Files',
           rootPath: '',
           totalNeededBytes: 0,
           totalFreeBytes: 0,
         },
         archiveFiles: {
-          desc: 'Archive Files: ',
+          desc: 'Archive Files',
           rootPath: '',
           totalNeededBytes: 0,
           totalFreeBytes: 0,
@@ -272,9 +272,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       <div>
           <p className={(instance.totalNeededBytes > instance.totalFreeBytes) || this.testSumBreach() ? 'disk-space-insufficient' : 'disk-space-sufficient'}>
             {
-            t('{{desc}}{{rootPath}} - Size required: {{required}} / {{available}}', {
+            t('{{desc}}: {{rootPath}} - Size required: {{required}} / {{available}}', {
               replace: {
-                desc: instance.desc,
+                desc: t(instance.desc),
                 rootPath: instance.rootPath,
                 required: util.bytesToString(instance.totalNeededBytes),
                 available: util.bytesToString(instance.totalFreeBytes),
