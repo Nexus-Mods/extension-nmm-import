@@ -509,6 +509,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private totalArchiveSize(): Promise<number> {
     const { modsToImport } = this.state;
+    // No NMM mods for this game.
+    if (modsToImport === undefined) {
+      return Promise.resolve(0);
+    }
     const modList = Object.keys(modsToImport).map(id => modsToImport[id]).filter(mod => this.isModEnabled(mod) && !mod.isAlreadyManaged);
     return Promise.map(modList, mod => {
       return this.calculateArchiveSize(mod);
