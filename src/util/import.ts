@@ -35,6 +35,9 @@ function enhance(sourcePath: string, input: IModEntry,
     .then(infoXmlData => {
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(infoXmlData.toString(), 'text/xml');
+
+      const customName = getInner(xmlDoc.querySelector('fomod Name'));
+
       let categoryId = getInner(xmlDoc.querySelector('fomod CustomCategoryId'))
                       || getInner(xmlDoc.querySelector('fomod CategoryId'));
       const category = categoryId !== undefined ? nmmCategories[categoryId] : undefined;
@@ -49,6 +52,7 @@ function enhance(sourcePath: string, input: IModEntry,
         ...input,
         archiveId: shortid(),
         categoryId,
+        customName,
       };
     })
     .catch(err => input);
@@ -100,7 +104,7 @@ function importMods(api: types.IExtensionApi,
       const downloadPath = selectors.downloadPath(state);
       return Promise.map(mods, mod => enhance(modsPath, mod, categories, makeVortexCategory))
         .then(modsEx => Promise.mapSeries(modsEx, (mod, idx) => {
-          trace.log('info', 'transferring', mod);
+          trace.log('info', 'transferring', JSON.stringify(mod, undefined, 2));
           progress(mod.modName, idx);
           return transferUnpackedMod(mod, sourcePath, alternateSourcePath, installPath, true)
             .then(failed => {

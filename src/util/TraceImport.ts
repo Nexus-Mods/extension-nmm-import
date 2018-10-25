@@ -38,7 +38,7 @@ class TraceImport {
   public log(level: 'info' | 'warn' | 'error', message: string, extra?: any): void {
     let fullMessage = message;
     if (extra !== undefined) {
-      fullMessage += ' (' + inspect(extra, { depth: null }) + ')';
+      fullMessage += ' (' + inspect(extra, { depth: null }).replace('\n', os.EOL) + ')';
     }
     this.mLogFile.write(fullMessage + os.EOL);
   }

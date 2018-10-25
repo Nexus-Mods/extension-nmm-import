@@ -14,6 +14,7 @@ export interface IModEntry {
   fileEntries: IFileEntry[];
   archiveId?: string;
   categoryId?: string;
+  customName?: string;
 }
 
 export interface IFileEntry {

@@ -4,10 +4,6 @@ import * as Promise from 'bluebird';
 import * as Redux from 'redux';
 import { actions, log, types } from 'vortex-api';
 
-interface IVortexMod {
-  [modId: string]: types.IMod;
-}
-
 export function createProfile(gameId: string, profileId: string,
                               profileName: string, dispatch: Redux.Dispatch<any>) {
   log ('info', 'Create profile: ', {gameId, profileId});
@@ -34,6 +30,7 @@ export function addMods(gameID: string, profileId: string,
       attributes: {
         name: modName,
         installTime: new Date(),
+        customFileName: modEntry.customName,
         version: modEntry.modVersion,
         fileId: modEntry.downloadId,
         fileMD5: modEntry.archiveMD5,
