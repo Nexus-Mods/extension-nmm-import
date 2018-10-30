@@ -288,7 +288,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
                   'will have all the mods you have chosen to import into Vortex ' + 
                   'enabled, with your scripted installer (FOMOD) settings preserved<br /><br />' +
                   'Choosing \"Switch Profile\" will switch over to the import profile. ' + 
-                  'Choosing "Cancel" will keep your currently active profile. <br /><br />' +
+                  'Choosing "Close" will keep your currently active profile. <br /><br />' +
                   'Please note when switching: although mods will be enabled by default, plugins require you to enable them MANUALLY! ' +
                   'please enable your plugins manually once the profile switch is complete!<br /><br />' +
                   'If you want to switch profiles at a later point in time and need help, please consult our wiki:<br /><br />' + 
@@ -299,7 +299,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           label: 'Switch Profile', action: () => this.commenceSwitch()
         },
         {
-          label: 'Cancel'
+          label: 'Close'
         },
       ]);
     }
