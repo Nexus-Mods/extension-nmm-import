@@ -269,9 +269,41 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     }
   }
 
+  private commenceSwitch() {
+    const store = this.context.api.store;
+    const profileId = getProfileId();
+    if (profileId !== undefined) {
+      store.dispatch((actions as any).setNextProfile(profileId));
+    }
+  }
+
   // TODO: REMOVE THIS ONCE THE STRATEGIC SOLUTION IS IN PLACE!
   private notifySwitchProfile() {
     const { t } = this.props;
+
+    const openDialog = () => {
+      this.context.api.showDialog('info', 'Switch Profile', {
+        bbcode: t('As part of the import process, a new profile named ' + 
+                  '\"Imported NMM profile\" has been created. This profile ' +  
+                  'will have all the mods you have chosen to import into Vortex ' + 
+                  'enabled, with your scripted installer (FOMOD) settings preserved<br /><br />' +
+                  'Choosing \"Switch Profile\" will switch over to the import profile. ' + 
+                  'Choosing "Cancel" will keep your currently active profile. <br /><br />' +
+                  'Please note when switching: although mods will be enabled by default, plugins require you to enable them MANUALLY! ' +
+                  'please enable your plugins manually once the profile switch is complete!<br /><br />' +
+                  'If you want to switch profiles at a later point in time and need help, please consult our wiki:<br /><br />' + 
+                  '[url]https://wiki.nexusmods.com/index.php/Setting_up_profiles_in_Vortex[/url]' ),
+                  options: { wrap: true },
+      }, [
+        { 
+          label: 'Switch Profile', action: () => this.commenceSwitch()
+        },
+        {
+          label: 'Cancel'
+        },
+      ]);
+    }
+
     this.context.api.sendNotification({
       type: 'info',
       title: t('Switch Profile'),
@@ -281,38 +313,15 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         {
           title: 'Yes',
           action: dismiss => {
-            const store = this.context.api.store;
-            const profileId = getProfileId();
-            if (profileId !== undefined) {
-              store.dispatch((actions as any).setNextProfile(profileId));
-            }
+            openDialog();
             dismiss();
           },
         },
         {
           title: 'No',
           action: dismiss => {
+            openDialog();
             dismiss();
-          },
-        },
-        {
-          title: 'More',
-          action: dismiss => {
-            // The dismiss argument is being ignored intentionally as we
-            //  wish to force the user to respond 'yes' or 'no'
-            this.context.api.showDialog('info', 'Switch Profile', {
-              bbcode: t('As part of the import process, a new profile named ' + 
-                        '\"Imported NMM profile\" has been created. This profile ' +  
-                        'will have all the mods you have chosen to import into Vortex ' + 
-                        'enabled, with your scripted installer (FOMOD) settings preserved<br /><br />' +
-                        'Choosing \"yes\" will switch over to the import profile. ' + 
-                        'Choosing "no" will keep your currently active profile. <br /><br />' +
-                        'If you want to switch profiles at a later point in time and need help, please consult our wiki:<br /><br />' + 
-                        '[url]https://wiki.nexusmods.com/index.php/Setting_up_profiles_in_Vortex[/url]' ),
-                        options: { wrap: true },
-            }, [
-              { label: 'Ok' },
-            ])
           },
         },
       ],
