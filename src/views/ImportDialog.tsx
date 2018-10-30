@@ -4,6 +4,7 @@ import { IModEntry } from '../types/nmmEntries';
 import { getCategories } from '../util/categories';
 import findInstances from '../util/findInstances';
 import importMods from '../util/import';
+import {getProfileId} from '../util/import'
 import parseNMMConfigFile from '../util/nmmVirtualConfigParser';
 import TraceImport from '../util/TraceImport';
 import * as winapi from 'winapi-bindings';
@@ -19,7 +20,7 @@ import { translate } from 'react-i18next';
 import { connect } from 'react-redux';
 import * as Redux from 'redux';
 import { ComponentEx, Icon, Modal, selectors, Spinner, Steps, Table, fs,
-         Toggle, types, util } from 'vortex-api';
+         Toggle, types, util, actions } from 'vortex-api';
 
 import * as Promise from 'bluebird';
 
@@ -262,8 +263,60 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         this.setup();
       } else if (newProps.importStep === 'working') {
         this.startImport();
+      } else if (newProps.importStep === 'review') {
+        this.notifySwitchProfile();
       }
     }
+  }
+
+  // TODO: REMOVE THIS ONCE THE STRATEGIC SOLUTION IS IN PLACE!
+  private notifySwitchProfile() {
+    const { t } = this.props;
+    this.context.api.sendNotification({
+      type: 'info',
+      title: t('Switch Profile'),
+      message: t('A new NMM profile has been created as part of the import process. Switch to the newly created profile?'),
+      noDismiss: true,
+      actions: [
+        {
+          title: 'Yes',
+          action: dismiss => {
+            const store = this.context.api.store;
+            const profileId = getProfileId();
+            if (profileId !== undefined) {
+              store.dispatch(actions.setNextProfile(profileId));
+            }
+            dismiss();
+          },
+        },
+        {
+          title: 'No',
+          action: dismiss => {
+            dismiss();
+          },
+        },
+        {
+          title: 'More',
+          action: dismiss => {
+            // The dismiss argument is being ignored intentionally as we
+            //  wish to force the user to respond 'yes' or 'no'
+            this.context.api.showDialog('info', 'Switch Profile', {
+              bbcode: t('As part of the import process, a new profile named ' + 
+                        '\"Imported NMM profile\" has been created. This profile ' +  
+                        'will have all the mods you have chosen to import into Vortex ' + 
+                        'enabled, with your scripted installer (FOMOD) settings preserved<br /><br />' +
+                        'Choosing \"yes\" will switch over to the import profile. ' + 
+                        'Choosing "no" will keep your currently active profile. <br /><br />' +
+                        'If you want to switch profiles at a later point in time and need help, please consult our wiki:<br /><br />' + 
+                        '[url]https://wiki.nexusmods.com/index.php/Setting_up_profiles_in_Vortex[/url]' ),
+                        options: { wrap: true },
+            }, [
+              { label: 'Ok' },
+            ])
+          },
+        },
+      ],
+    });
   }
 
   private getCapacityInfo(instance: ICapacityInfo): JSX.Element {

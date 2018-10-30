@@ -9,6 +9,13 @@ import * as path from 'path';
 import { generate as shortid } from 'shortid';
 import { actions, fs, selectors, types } from 'vortex-api';
 
+// TODO: REMOVE THIS ONCE THE STRATEGIC PROFILE
+//  SOLUTION IS IN PLACE.
+let _NMM_PROFILE_ID = undefined;
+export function getProfileId() {
+  return _NMM_PROFILE_ID;
+}
+
 function getInner(ele: Element): string {
   if ((ele !== undefined) && (ele !== null)) {
     const node = ele.childNodes[0];
@@ -131,6 +138,7 @@ function importMods(api: types.IExtensionApi,
           .then(() => {
             trace.log('info', 'Finished transferring unpacked mod files');
             const profileId = shortid();
+            _NMM_PROFILE_ID = profileId;
             createProfile(gameId, profileId, 'Imported NMM Profile', api.store.dispatch);
             addMods(gameId, profileId, modsEx, api.store.dispatch);
           }));
