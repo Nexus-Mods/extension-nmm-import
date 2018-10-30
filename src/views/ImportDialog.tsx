@@ -284,7 +284,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
             const store = this.context.api.store;
             const profileId = getProfileId();
             if (profileId !== undefined) {
-              store.dispatch(actions.setNextProfile(profileId));
+              store.dispatch((actions as any).setNextProfile(profileId));
             }
             dismiss();
           },
