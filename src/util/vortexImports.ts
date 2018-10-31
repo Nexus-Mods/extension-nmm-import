@@ -41,6 +41,16 @@ export function addMods(gameID: string, profileId: string,
     if (modEntry.nexusId) {
       mod.attributes.source = 'nexus';
       mod.attributes.modId = modEntry.nexusId;
+    } else {
+      // NMM did not store a modId for this mod. This is a valid
+      //  case when a mod has been manually added to NMM.
+      //  We're going to try and retrieve the nexus id from the file name
+      //  if possible.
+      const match = modEntry.modFilename.match(/-([0-9]+)-/);
+      if (match !== null) {
+        mod.attributes.source = 'nexus';
+        mod.attributes.modId = match[1];
+      }
     }
 
     mods.push(mod);
