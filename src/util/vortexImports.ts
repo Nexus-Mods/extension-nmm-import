@@ -2,21 +2,10 @@ import { IModEntry } from '../types/nmmEntries';
 
 import * as Promise from 'bluebird';
 import * as Redux from 'redux';
-import { actions, log, types } from 'vortex-api';
+import { actions, types, util } from 'vortex-api';
 
-export function createProfile(gameId: string, profileId: string,
-                              profileName: string, dispatch: Redux.Dispatch<any>) {
-  log ('info', 'Create profile: ', {gameId, profileId});
-  dispatch(actions.setProfile({
-    id: profileId,
-    gameId,
-    name: profileName,
-    modState: {},
-  }));
-}
-
-export function addMods(gameID: string, profileId: string,
-                        modEntries: IModEntry[], dispatch: Redux.Dispatch<any>) {
+export function addMods(gameID: string, modEntries: IModEntry[], 
+                        dispatch: Redux.Dispatch<any>) {
   const mods: types.IMod[] = [];
 
   Promise.map(modEntries, modEntry => {
@@ -58,10 +47,34 @@ export function addMods(gameID: string, profileId: string,
   .then(() => {
     dispatch(actions.addMods(gameID, mods));
   })
-  .then(() => {
-    Promise.map(mods, mod => {
-      enableMod(mod.id, profileId, dispatch);
-    });
+}
+
+// Used to enable the imported mods for the specified profileId.
+//  - Function will retrieve all mods installed for a certain gameId ( We expect 
+//  the mods to be installed inside Vortex's staging folder at this stage )
+//  
+//  - Function will compare the provided mod entries against the persistent mods list
+//  and will enable only the mod entries it finds within the persistent list.
+export function enableModsForProfile(gameId: string, 
+                              profileId: string, 
+                              state: any, 
+                              modEntries: IModEntry[], 
+                              dispatch: Redux.Dispatch<any>) {
+  const mods: types.IMod[] = util.getSafe(state, ['persistent', 'mods', gameId], undefined);
+  if (mods === undefined) {
+    return;
+  }
+
+  const isImported = (mod: types.IMod) => {
+    return modEntries.find(entry => {
+      const modName = entry.modFilename.substr(0, entry.modFilename.lastIndexOf('.'));
+      return modName === mod.id;
+    }) !== undefined
+  }
+
+  const importedMods = Object.keys(mods).map(id => mods[id]).filter(isImported);
+  Promise.map(importedMods, mod => {
+    enableMod(mod.id, profileId, dispatch);
   });
 }
 

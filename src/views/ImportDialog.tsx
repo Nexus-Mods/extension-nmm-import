@@ -4,10 +4,12 @@ import { IModEntry } from '../types/nmmEntries';
 import { getCategories } from '../util/categories';
 import findInstances from '../util/findInstances';
 import importMods from '../util/import';
-import {getProfileId} from '../util/import'
+import { enableModsForProfile } from '../util/vortexImports';
 import parseNMMConfigFile from '../util/nmmVirtualConfigParser';
+
 import TraceImport from '../util/TraceImport';
 import * as winapi from 'winapi-bindings';
+import { generate as shortid } from 'shortid';
 
 import {
   FILENAME, FILES, LOCAL, MOD_ID, MOD_NAME, MOD_VERSION,
@@ -31,6 +33,9 @@ interface IConnectedProps {
   downloadPath: string;
   installPath: string;
   importStep?: Step;
+  profiles: {[id: string]: types.IProfile}
+  activeProfile: types.IProfile;
+  profilesVisible: boolean;
 }
 
 interface ICapacityInfo {
@@ -42,6 +47,7 @@ interface ICapacityInfo {
 
 interface IActionProps {
   onSetStep: (newState: Step) => void;
+  onCreateProfile: (newProfile: types.IProfile) => void;
 }
 
 type IProps = IConnectedProps & IActionProps;
@@ -49,6 +55,7 @@ type IProps = IConnectedProps & IActionProps;
 interface IComponentState {
   sources: string[][];
   selectedSource: string[];
+  selectedProfile: { id: string, profile: types.IProfile };
   importArchives: boolean;
   modsToImport: { [id: string]: IModEntry };
   error: string;
@@ -60,6 +67,15 @@ interface IComponentState {
   isCalculating: { [id: string]: boolean };
   capacityInformation: { [id:string]: ICapacityInfo };
   hasCalculationErrors: boolean;
+
+  // Dictates whether mods will be automatically
+  //  enabled at the end of the import process.
+  enableModsOnFinish: boolean;
+
+  // We don't want to allow users to create infinite amount
+  //  of new profiles from within the import process, this
+  //  variable will hold a reference to the newly created profile.
+  newProfile: types.IProfile;
 }
 
 class ImportDialog extends ComponentEx<IProps, IComponentState> {
@@ -80,6 +96,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       error: undefined,
       importEnabled: {},
       counter: 0,
+      progress: undefined,
+      failedImports: [],
+
       hasCalculationErrors: false,
       isCalculating: {
         onChange: false,
@@ -100,8 +119,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           totalFreeBytes: 0,
         },
       },
-      progress: undefined,
-      failedImports: [],
+      
+      selectedProfile: undefined,
+      enableModsOnFinish: true,
+      newProfile: undefined,
     });
 
     this.mDebouncer = new util.Debouncer((mod) => {
@@ -150,6 +171,18 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         },
       },
     };
+  }
+
+  private getModNumber(): string {
+    const { modsToImport } = this.state;
+    if (modsToImport === undefined) {
+      return '';
+    }
+
+    const modList = Object.keys(modsToImport).map(id => modsToImport[id]);
+    const enabledMods = modList.filter(mod => this.isModEnabled(mod));
+
+    return `${enabledMods.length} / ${modList.length}`;
   }
 
   private onToggleArchive(arg: boolean): Promise<void> {
@@ -263,40 +296,75 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         this.setup();
       } else if (newProps.importStep === 'working') {
         this.startImport();
-      } else if (newProps.importStep === 'review') {
-        this.notifySwitchProfile();
       }
     }
   }
 
-  private commenceSwitch() {
+  private commenceSwitch(profileId: string) {
+    const { profiles, gameId } = this.props;
     const store = this.context.api.store;
-    const profileId = getProfileId();
-    if (profileId !== undefined) {
+
+    const isValidProfile = (profileId: string): boolean => {
+      return Object.keys(profiles).filter(id => id === profileId) !== undefined;
+    }
+    
+    if (profileId !== undefined && isValidProfile(profileId)) {
       store.dispatch((actions as any).setNextProfile(profileId));
+      //store.dispatch(actions as any).setDeploymentNecessary(gameId, true);
     }
   }
 
-  // TODO: REMOVE THIS ONCE THE STRATEGIC SOLUTION IS IN PLACE!
+  private createANewProfile(): Promise<types.IProfile> {
+    const { t, gameId, onCreateProfile, activeProfile } = this.props;
+    const { newProfile } = this.state;
+
+    if (newProfile !== undefined) {
+      return Promise.resolve(newProfile);
+    }
+
+    return new Promise<types.IProfile>((resolve, reject) => {
+      const newId = shortid();
+      this.context.api.showDialog('question', t('Create new profile'), {
+          input: [{ id: 'profileName', value: '', label: t('Profile Name') }],
+      }, [{label: t('Create Profile')}, {label: t('Cancel')}])
+      .then((result: types.IDialogResult) => {
+        if (result.action === t('Create Profile')) {
+          const newProf: types.IProfile = {
+            id: newId,
+            gameId: gameId,
+            name: result.input.profileName,
+            modState: {},
+            lastActivated: 0,
+          }
+          onCreateProfile(newProf);
+          this.nextState.newProfile = newProf;
+          return resolve(newProf);
+        } else {
+          return resolve(activeProfile);
+        }
+      })
+    })
+  }
+
   private notifySwitchProfile() {
-    const { t } = this.props;
+    const { t, activeProfile } = this.props;
+    const {selectedProfile} = this.state;
 
     const openDialog = () => {
       this.context.api.showDialog('info', 'Switch Profile', {
-        bbcode: t('As part of the import process, a new profile named ' + 
-                  '\"Imported NMM profile\" has been created. This profile ' +  
-                  'will have all the mods you have chosen to import into Vortex ' + 
-                  'enabled, with your scripted installer (FOMOD) settings preserved<br /><br />' +
+        bbcode: t(`Your currently active profile is: "${activeProfile.name}/${activeProfile.id}"; you chose to enable ` + 
+                  `the imported mods for a different profile named: "${selectedProfile.profile.name}/${selectedProfile.id}", ` +
+                  'would you like to switch to this profile now? - installer (FOMOD) settings will be preserved<br /><br />' +
                   'Choosing \"Switch Profile\" will switch over to the import profile. ' + 
                   'Choosing "Close" will keep your currently active profile. <br /><br />' +
-                  'Please note when switching: although mods will be enabled by default, plugins require you to enable them MANUALLY! ' +
+                  'Please note when switching: although mods will be enabled by default, plugins require you to enable them [b]MANUALLY![/b] ' +
                   'please enable your plugins manually once the profile switch is complete!<br /><br />' +
                   'If you want to switch profiles at a later point in time and need help, please consult our wiki:<br /><br />' + 
                   '[url]https://wiki.nexusmods.com/index.php/Setting_up_profiles_in_Vortex[/url]' ),
                   options: { wrap: true },
       }, [
         { 
-          label: 'Switch Profile', action: () => this.commenceSwitch()
+          label: 'Switch Profile', action: () => this.commenceSwitch(selectedProfile.id)
         },
         {
           label: 'Close'
@@ -357,6 +425,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       ? this.nextLabel(importStep)
       : undefined;
 
+    const onClick = () => importStep !== 'review'
+      ? this.next()
+      : this.finish();
+
     let merged: ICapacityInfo = undefined;
     if (this.isIdenticalRootPath()) {
       merged = {
@@ -382,7 +454,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           {importStep === 'setup' && hasCalculationErrors && <p className='calculation-error'>Vortex cannot validate NMM's mod/archive files - this usually occurs when the NMM configuration is corrupt</p>}
           {canCancel ? <Button onClick={this.cancel}>{t('Cancel')}</Button> : null}
           { nextLabel ? (
-            <Button disabled={this.isNextDisabled()} onClick={this.next}>{nextLabel}</Button>
+            <Button disabled={this.isNextDisabled()} onClick={onClick}>{nextLabel}</Button>
            ) : null }
         </Modal.Footer>
       </Modal>
@@ -444,9 +516,15 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private isNextDisabled = () => {
     const { importStep } = this.props;
-    const { error, modsToImport } = this.state;
+    const { error, modsToImport, importEnabled } = this.state;
+    
+    const enabled = modsToImport !== undefined 
+      ? Object.keys(modsToImport).filter(id => this.isModEnabled(modsToImport[id]))
+      : [];
+    
     return (error !== undefined)
         || ((importStep === 'setup') && (modsToImport === undefined))
+        || ((importStep === 'setup') && (enabled.length === 0))
         || ((importStep === 'setup') && (this.isBusyCalculating()))
         || ((importStep === 'setup') && (this.testCapacityInfoBreaches()));
   }
@@ -526,6 +604,37 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     );
   }
 
+  /**
+   * Will render the following sequentially:
+   * - A create new profile element which will open a dialog requesting a name
+   *   for the newly create profile.
+   * - The active profile, prefixed by "Active Profile:" to highlight which profile
+   *   is the currently selected profile.
+   * - All other profiles assigned to the current gameId.
+   */
+  private renderProfiles(): JSX.Element {
+    const { selectedProfile, newProfile } = this.state;
+    const { t, profiles, activeProfile } = this.props;
+
+    const profileList = Object.keys(profiles).map(id => profiles[id]);
+
+    return (
+      <div>
+        {t('Please select a profile to import to:')}
+        <SplitButton
+          id='import-select-profile'
+          title={selectedProfile !== undefined ? selectedProfile.profile.name : 'errr'}
+          onSelect={this.selectProfile}
+          style={{ marginLeft: 15 }}
+        >
+          {newProfile === undefined && this.renderDropdownElement('Create New Profile->', '_create_new_profile_')}
+          {this.renderDropdownElement(t('Active Profile: ') + activeProfile.name, '_currently_active_profile_')}
+          {profileList.map(prof => prof.id !== activeProfile.id ? this.renderDropdownElement(prof.name, prof.id) : null)}
+        </SplitButton>
+      </div>
+    );
+  }
+
   private renderNoSources(): JSX.Element {
     const { t } = this.props;
 
@@ -552,14 +661,22 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           onSelect={this.selectSource}
           style={{ marginLeft: 15 }}
         >
-          {sources.map(this.renderSource)}
+          {sources.map(this.renderDropdownElement)}
         </SplitButton>
       </div>
     );
   }
 
-  private renderSource = option => {
-    return <MenuItem key={option} eventKey={option}>{option[0]}</MenuItem>;
+  private renderDropdownElement = (option, evKey?) => {
+    const key = evKey !== undefined ? evKey : option;
+    return option.constructor === Array
+      ? <MenuItem key={option} eventKey={key}>{option[0]}</MenuItem>
+      : <MenuItem key={option} eventKey={key}>{option}</MenuItem>
+  }
+
+  private toggleEnableOnFinish = () => {
+    const { enableModsOnFinish } = this.state;
+    this.nextState.enableModsOnFinish = !enableModsOnFinish;
   }
 
   private toggleArchiveImport = () => {
@@ -585,15 +702,12 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private renderSelectMods(): JSX.Element {
     const { t } = this.props;
-    const { counter, importArchives, modsToImport, capacityInformation } = this.state;
+    const { counter, importArchives, modsToImport } = this.state;
 
     const content = (modsToImport === undefined)
       ? (
-        <div
-          style={{ flex: '1 1 0', display: 'flex',
-                   justifyContent: 'center', alignItems: 'center' }}
-        >
-            <Icon style={{ width: '5em', height: '5em' }} name='spinner' />
+        <div className='spinner-container'>
+            <Icon className='rotating-spinner-icon' name='spinner' />
         </div>
       ) : (
         <Table
@@ -606,9 +720,15 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         />
       );
 
+    const importArchivesWarning: JSX.Element =
+      importArchives === false 
+      ? (<p className='import-archives-warning'>{t('You will not be able to re-install these mods!')}</p>)
+      : null
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         {content}
+        <h3>{t(`Importing: ${this.getModNumber()} mods`)}</h3>
         <Toggle
           checked={importArchives}
           onToggle={this.toggleArchiveImport}
@@ -616,11 +736,12 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         >
           <a
             className='fake-link'
-            title={t('Imports only the archives referenced by imported mods')}
+            title={t('If toggled, this will import the mod archive (7z, zip, rar) in addition to any imported mod.')}
           >
             {t('Import archives')}
           </a>
         </Toggle>
+        {importArchivesWarning}
       </div>
     );
   }
@@ -641,8 +762,23 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private renderReview(): JSX.Element {
-    const { t } = this.props;
-    const { failedImports } = this.state;
+    const { t, profilesVisible, profiles } = this.props;
+    const { failedImports, enableModsOnFinish } = this.state;
+
+    const renderToggle = profilesVisible ? (
+      <Toggle
+          checked={enableModsOnFinish}
+          onToggle={this.toggleEnableOnFinish}
+          style={{ marginTop: 10 }}
+        >
+          <a
+            className='fake-link'
+            title={t('Will enable the imported mods for the selected profile')}
+          >
+            {t('Enable mods for selected profile')}
+          </a>
+      </Toggle>
+    ) : null;
 
     return (
       <div className='import-working-container'>
@@ -663,6 +799,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           {' '}
           <a onClick={this.openLog}>{this.mTrace.logFilePath}</a>
         </span>
+
+        {profilesVisible && profiles !== undefined && this.renderProfiles()}
+        {renderToggle}
       </div>
     );
   }
@@ -686,16 +825,66 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     this.nextState.selectedSource = eventKey;
   }
 
+  private selectProfile = eventKey => {
+    const { activeProfile, profiles } = this.props;
+    if (eventKey === '_currently_active_profile_') {
+      this.nextState.selectedProfile = { id: activeProfile.id, profile: activeProfile };
+    } else if (eventKey === '_create_new_profile_') {
+      this.createANewProfile().then(res => {
+        if (res !== undefined) {
+          this.nextState.selectedProfile = { id: res.id, profile: res };
+        } else {
+          this.context.api.showErrorNotification('Unable to create new profile', null);
+        }
+      });
+    } else {
+      const profList = Object.keys(profiles).map(id => profiles[id]);
+      const prof = profList.find(profile => profile.id === eventKey);
+
+      prof !== undefined 
+        ? this.nextState.selectedProfile = { id: prof.id, profile: prof }
+        : this.context.api.showErrorNotification('Failed to select profile', null);
+    }
+  }
+
   private nop = () => undefined;
 
   private cancel = () => {
     this.props.onSetStep(undefined);
   }
 
-  private next = (): void => {
+  private next() {
     const { onSetStep, importStep } = this.props;
     const currentIdx = ImportDialog.STEPS.indexOf(importStep);
     onSetStep(ImportDialog.STEPS[currentIdx + 1]);
+  }
+
+  private finish() {
+    const { activeProfile, gameId } = this.props;
+    const { selectedProfile, modsToImport, enableModsOnFinish } = this.state;
+
+    const store = this.context.api.store;
+    const state = store.getState();
+    const modList = Object.keys(modsToImport).map(id => modsToImport[id]);
+    const enabledMods = modList.filter(mod => this.isModEnabled(mod));
+
+    // Check whether the user wants Vortex to automatically enable the mods 
+    //  he imported from NMM, and if so, enable the mods for the selected
+    //  profile.
+    if (enableModsOnFinish) {
+      enableModsForProfile(gameId, selectedProfile.id, state, enabledMods, store.dispatch);
+
+      // Check whether the active profile is different from the selected profile.
+      //  If so, raise the switch profile notification; otherwise notify the user that
+      //  he needs to deploy the newly added mods.
+      if (activeProfile.id !== selectedProfile.id) {
+        this.notifySwitchProfile();
+      } else {
+        this.context.api.store.dispatch(actions.setDeploymentNecessary(gameId, true));
+      }
+    }
+
+    this.next();
   }
 
   private isIdenticalRootPath(): boolean {
@@ -708,7 +897,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private start() {
     const { modFiles, archiveFiles } = this.nextState.capacityInformation;
+    const { activeProfile } = this.props;
     this.nextState.error = undefined;
+
+    this.nextState.selectedProfile = { id: activeProfile.id, profile: activeProfile };;
 
     modFiles.rootPath = winapi.GetVolumePathName(this.props.installPath);
     modFiles.totalFreeBytes = winapi.GetDiskFreeSpaceEx(this.props.installPath).free;
@@ -788,18 +980,33 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 }
 
 function mapStateToProps(state: any): IConnectedProps {
-  const id = selectors.activeGameId(state);
+  const gameId = selectors.activeGameId(state);
+  const profiles: {[id: string]: types.IProfile} = util.getSafe(state, ['persistent', 'profiles'], undefined);
+  
+  // Worried about how the below bit may affect performance...
+  let relevantProfiles: {[id: string]: types.IProfile} = {};
+  profiles !== undefined
+    ? Object.keys(profiles)
+      .map(id => profiles[id])
+      .filter(prof => prof.gameId === gameId)
+      .forEach(profile => relevantProfiles[profile.id] = profile)
+    : {};
+
   return {
-    gameId: id,
+    gameId: gameId,
     importStep: state.session.modimport.importStep,
+    profilesVisible: state.settings.interface.profilesVisible,
     downloadPath: selectors.downloadPath(state),
-    installPath: selectors.installPathForGame(state, id)
+    installPath: selectors.installPathForGame(state, gameId),
+    activeProfile: selectors.activeProfile(state),
+    profiles: relevantProfiles,
   };
 }
 
 function mapDispatchToProps(dispatch: Redux.Dispatch<any>): IActionProps {
   return {
     onSetStep: (step?: Step) => dispatch(setImportStep(step)),
+    onCreateProfile: (profile: types.IProfile) => dispatch(actions.setProfile(profile)),
   };
 }
 

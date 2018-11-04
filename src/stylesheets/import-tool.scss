@@ -15,6 +15,18 @@
   min-width: 0px;
 }
 
+.spinner-container {
+  flex: 1 1 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.rotating-spinner-icon {
+  width: 5em;
+  height: 5em;
+}
+
 .import-working-container {
   flex: 1 1 0;
   display: flex;
@@ -49,4 +61,8 @@
 
 .calculation-error {
   color: $brand-danger;
+}
+
+.import-archives-warning {
+  color: $brand-warning;
 }
