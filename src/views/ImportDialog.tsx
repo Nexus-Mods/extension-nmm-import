@@ -600,15 +600,30 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           justifyContent: 'space-around', height: '100%',
         }}
       >
-        {t('This tool is an easy way of transferring your current '
-          + 'NMM configuration into Vortex.')}
+        {t('This is an import tool that allows you to bring your mods over from an existing NMM installation.')} <br/>
+        {t('Please note that the process has a number of limitations, and starting with a fresh mod install is')} <br/>
+        {t('therefore recommended.')}
         <div>
-          {t('Before you continue, please take note of a few things:')}
+          {t('The import tool will:')}
           <ul>
-            <li>{t('Mods will be copied from NMM to Vortex. This may take a while.')}</li>
-            <li>{t('Your original NMM installation is not modified.')}</li>
-            <li>{t('Please make sure you have enough disk space to copy the selected mods.')}</li>
-            <li>{t('A new profile is created inside Vortex.')}</li>
+            <li>{t('copy all mods that are currently managed by NMM over to Vortex.')}</li>
+            <li>{t('preserve your chosen scripted installer (FOMOD) options for mods installed via NMM.')}</li>
+            <li>{t('reorder your plugin list based on LOOT rules.')}</li>
+            <li>{t('require sufficient disk space as imported mods will be copied (rather than moved).')}</li>
+            <li>{t('give you the choice of importing mods into your currently active profile, or create a new import profile in step 4.')}</li>
+            <li>{t('leave your existing NMM installation unmodified.')}</li>
+          </ul>
+        </div>
+        <div>
+          {t('The import tool won’t:')}
+          <ul>
+            <li>{t('import any mod files in your data folder that are not managed by NMM. If you have ') +
+                  t('mods reliant on unmanaged files, those mods might not work as expected in your ') + 
+                  t('Vortex profile.')}</li>
+            <li>{t('import your overwrite decisions. After importing, Vortex will allow you to decide your') +
+                  t('mod overwrites dynamically, without needing to reinstall mods.')}</li>
+            <li>{t('preserve your plugin load order, as plugins will be rearranged according to LOOT') +
+                  t('rules.')}</li>
           </ul>
         </div>
         {sources === undefined
