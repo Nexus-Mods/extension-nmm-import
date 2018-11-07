@@ -301,7 +301,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private commenceSwitch(profileId: string) {
-    const { profiles, gameId } = this.props;
+    const { profiles } = this.props;
     const store = this.context.api.store;
 
     const isValidProfile = (profileId: string): boolean => {
@@ -312,6 +312,23 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       store.dispatch((actions as any).setNextProfile(profileId));
       //store.dispatch(actions as any).setDeploymentNecessary(gameId, true);
     }
+  }
+
+  // To be used after the import process finished. Will return
+  //  an array containing successfully imported mods. This will 
+  //  ignore archive import errors as the mods should still
+  //  be deployable even if the archives encountered issues.
+  private getSuccessfullyImported(): IModEntry[] {
+    const { failedImports, modsToImport } = this.state;
+    const enabledMods = Object.keys(modsToImport)
+      .map(id => modsToImport[id])
+      .filter(mod => this.isModEnabled(mod));
+
+    if (failedImports === undefined || failedImports.length === 0) {
+      return enabledMods;
+    }
+
+    return enabledMods.filter(mod => failedImports.find(fail => fail === mod.modName) === undefined);
   }
 
   private createANewProfile(): Promise<types.IProfile> {
@@ -765,7 +782,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const { t, profilesVisible, profiles } = this.props;
     const { failedImports, enableModsOnFinish } = this.state;
 
-    const renderToggle = profilesVisible ? (
+    const imported = this.getSuccessfullyImported();
+
+    const renderToggle = profilesVisible && imported.length > 0 ? (
       <Toggle
           checked={enableModsOnFinish}
           onToggle={this.toggleEnableOnFinish}
@@ -800,7 +819,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           <a onClick={this.openLog}>{this.mTrace.logFilePath}</a>
         </span>
 
-        {profilesVisible && profiles !== undefined && this.renderProfiles()}
+        {profilesVisible && imported.length > 0 && profiles !== undefined && this.renderProfiles()}
         {renderToggle}
       </div>
     );
@@ -861,18 +880,26 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private finish() {
     const { activeProfile, gameId } = this.props;
-    const { selectedProfile, modsToImport, enableModsOnFinish } = this.state;
+    const { selectedProfile, enableModsOnFinish } = this.state;
+
+    // We're only interested in the mods we actually managed to import.
+    const imported = this.getSuccessfullyImported();
+
+    // If we did not succeed in importing anything, there's no point in
+    //  enabling anything.
+    if (imported.length === 0) {
+      this.next();
+      return;
+    }
 
     const store = this.context.api.store;
     const state = store.getState();
-    const modList = Object.keys(modsToImport).map(id => modsToImport[id]);
-    const enabledMods = modList.filter(mod => this.isModEnabled(mod));
 
     // Check whether the user wants Vortex to automatically enable the mods 
     //  he imported from NMM, and if so, enable the mods for the selected
     //  profile.
     if (enableModsOnFinish) {
-      enableModsForProfile(gameId, selectedProfile.id, state, enabledMods, store.dispatch);
+      enableModsForProfile(gameId, selectedProfile.id, state, imported, store.dispatch);
 
       // Check whether the active profile is different from the selected profile.
       //  If so, raise the switch profile notification; otherwise notify the user that

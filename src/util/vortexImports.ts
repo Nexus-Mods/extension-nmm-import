@@ -73,7 +73,7 @@ export function enableModsForProfile(gameId: string,
   }
 
   const importedMods = Object.keys(mods).map(id => mods[id]).filter(isImported);
-  Promise.map(importedMods, mod => {
+  importedMods.map(mod => {
     enableMod(mod.id, profileId, dispatch);
   });
 }
