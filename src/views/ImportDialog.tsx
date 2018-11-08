@@ -28,6 +28,15 @@ import * as Promise from 'bluebird';
 
 type Step = 'start' | 'setup' | 'working' | 'review';
 
+const _LINKS = {
+  TO_CONSIDER: 'https://wiki.nexusmods.com/index.php/Importing_from_Nexus_Mod_Manager:_Things_to_consider',
+  FOMOD_LINK: 'https://wiki.nexusmods.com/index.php/Importing_from_Nexus_Mod_Manager:_Things_to_consider#Scripted_Installers_.2F_FOMOD_Installers',
+  UNMANAGED: 'https://wiki.nexusmods.com/index.php/Importing_from_Nexus_Mod_Manager:_Things_to_consider#Unmanaged_Files',
+  FILE_CONFLICTS: 'https://wiki.nexusmods.com/index.php/File_Conflicts:_Nexus_Mod_Manager_vs_Vortex',
+  MANAGE_CONFLICTS: 'https://wiki.nexusmods.com/index.php/Managing_File_Conflicts',
+  DOCUMENTATION: 'https://wiki.nexusmods.com/index.php/Category:Vortex',
+}
+
 interface IConnectedProps {
   gameId: string;
   downloadPath: string;
@@ -67,6 +76,12 @@ interface IComponentState {
   isCalculating: { [id: string]: boolean };
   capacityInformation: { [id:string]: ICapacityInfo };
   hasCalculationErrors: boolean;
+
+  // Array to hold conflicted mod names.
+  conflictedMods: string[];
+
+  // Array of successfully imported mod entries.
+  successfullyImported: IModEntry[];
 
   // Dictates whether mods will be automatically
   //  enabled at the end of the import process.
@@ -123,6 +138,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       selectedProfile: undefined,
       enableModsOnFinish: true,
       newProfile: undefined,
+      conflictedMods: [],
+      successfullyImported: [],
     });
 
     this.mDebouncer = new util.Debouncer((mod) => {
@@ -278,8 +295,23 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private calculateModFilesSize(mod: IModEntry): Promise<number> {
-    const { selectedSource } = this.state;
+    const { selectedSource, conflictedMods } = this.state;
     return Promise.map(mod.fileEntries, file => {
+
+      // Given that we're reading through the file entries, this
+      //  is a good point to check whether the NMM installation had
+      //  any file conflicts.
+      // 
+      // It's important to note that this logic will not execute when/if the
+      //  user decides to import a mod which is already managed by Vortex
+      //  but that is arguably acceptable given that the user may already have
+      //  rules set up for that mod.
+      if (!file.isActive && conflictedMods.find(conf => conf === mod.modName) === undefined) {
+        // The file is inactive - it's safe to assume that the NMM
+        //  installation had some conflicts.
+        this.nextState.conflictedMods.push(mod.modName);
+      }
+
       const filePath = path.join(selectedSource[0], 'VirtualInstall', file.fileSource);
       return fs.statAsync(filePath);
     }).then(stats => {
@@ -296,6 +328,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         this.setup();
       } else if (newProps.importStep === 'working') {
         this.startImport();
+      } else if (newProps.importStep === 'review') {
+        this.nextState.successfullyImported = this.getSuccessfullyImported();
       }
     }
   }
@@ -468,7 +502,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         <Modal.Footer>
           {importStep === 'setup' && (merged !== undefined ? this.getCapacityInfo(merged) : this.getCapacityInfo(capacityInformation.modFiles))}
           {importStep === 'setup' && importArchives && !this.isIdenticalRootPath() && this.getCapacityInfo(capacityInformation.archiveFiles)}
-          {importStep === 'setup' && hasCalculationErrors && <p className='calculation-error'>Vortex cannot validate NMM's mod/archive files - this usually occurs when the NMM configuration is corrupt</p>}
+          {importStep === 'setup' && hasCalculationErrors && <p className='calculation-error'>{t('Vortex cannot validate NMM\'s mod/archive files - this usually occurs when the NMM configuration is corrupt')}</p>}
           {canCancel ? <Button onClick={this.cancel}>{t('Cancel')}</Button> : null}
           { nextLabel ? (
             <Button disabled={this.isNextDisabled()} onClick={onClick}>{nextLabel}</Button>
@@ -533,7 +567,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private isNextDisabled = () => {
     const { importStep } = this.props;
-    const { error, modsToImport, importEnabled } = this.state;
+    const { error, modsToImport } = this.state;
     
     const enabled = modsToImport !== undefined 
       ? Object.keys(modsToImport).filter(id => this.isModEnabled(modsToImport[id]))
@@ -579,6 +613,11 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     );
   }
 
+  private getLink(link: string, text: string): JSX.Element {
+    const { t } = this.props;
+    return (<a onClick={() => util.opn(link).catch(err => null)}>{t(`${text}`)}</a>);
+  }
+
   private renderContent(state: Step): JSX.Element {
     switch (state) {
       case 'start': return this.renderStart();
@@ -590,8 +629,12 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private renderStart(): JSX.Element {
-    const { t } = this.props;
+    const { t, profilesVisible } = this.props;
     const { sources, selectedSource } = this.state;
+
+    const optionalContent = profilesVisible 
+      ? (<li>{t('give you the choice of importing mods into your currently active profile, or create a new import profile in step 4.')}</li>)
+      : null;
 
     return (
       <span
@@ -600,30 +643,45 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           justifyContent: 'space-around', height: '100%',
         }}
       >
-        {t('This is an import tool that allows you to bring your mods over from an existing NMM installation.')} <br/>
-        {t('Please note that the process has a number of limitations, and starting with a fresh mod install is')} <br/>
-        {t('therefore recommended.')}
         <div>
-          {t('The import tool will:')}
+          {t('This is an import tool that allows you to bring your mods over from an existing NMM installation.')} <br/>
+          {t('Please note that the process has a number of limitations, and')} <br/> 
+          {this.getLink(_LINKS.TO_CONSIDER, 'starting with a fresh mod install is therefore recommended.')}
+        </div>
+        <div>
+          <div className='import-will'>
+            <Icon name='feedback-success' />
+            {t('The import tool will:')}
+          </div>
           <ul>
             <li>{t('copy all mods that are currently managed by NMM over to Vortex.')}</li>
-            <li>{t('preserve your chosen scripted installer (FOMOD) options for mods installed via NMM.')}</li>
+
+            <li>
+              {t('preserve your chosen ')} 
+              {this.getLink(_LINKS.FOMOD_LINK, 'scripted installer (FOMOD) ')} 
+              {t('options for mods installed via NMM.')}
+            </li>
+
             <li>{t('reorder your plugin list based on LOOT rules.')}</li>
             <li>{t('require sufficient disk space as imported mods will be copied (rather than moved).')}</li>
-            <li>{t('give you the choice of importing mods into your currently active profile, or create a new import profile in step 4.')}</li>
+            {optionalContent}
             <li>{t('leave your existing NMM installation unmodified.')}</li>
           </ul>
         </div>
         <div>
-          {t('The import tool won’t:')}
+          <div className='import-wont'>
+            <Icon name='feedback-error' />
+            {t('The import tool won’t:')}
+          </div>
           <ul>
-            <li>{t('import any mod files in your data folder that are not managed by NMM. If you have ') +
-                  t('mods reliant on unmanaged files, those mods might not work as expected in your ') + 
-                  t('Vortex profile.')}</li>
-            <li>{t('import your overwrite decisions. After importing, Vortex will allow you to decide your') +
+            <li>
+              {t('import any mod files in your data folder that are ')} 
+              {this.getLink(_LINKS.UNMANAGED, 'not managed by NMM. ')}  
+              {t('If you have mods reliant on unmanaged files, those mods might not work as expected in your ')}  
+              {t('Vortex profile.')}</li>
+            <li>{t('import your overwrite decisions. After importing, Vortex will allow you to decide your ') +
                   t('mod overwrites dynamically, without needing to reinstall mods.')}</li>
-            <li>{t('preserve your plugin load order, as plugins will be rearranged according to LOOT') +
-                  t('rules.')}</li>
+            <li>{t('preserve your plugin load order, as plugins will be rearranged according to LOOT rules.')}</li>
           </ul>
         </div>
         {sources === undefined
@@ -739,7 +797,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const content = (modsToImport === undefined)
       ? (
         <div className='spinner-container'>
-            <Icon className='rotating-spinner-icon' name='spinner' />
+            <Icon name='spinner' />
         </div>
       ) : (
         <Table
@@ -787,32 +845,92 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const perc = Math.floor((progress.pos * 100) / Object.keys(modsToImport).length);
     return (
       <div className='import-working-container'>
-        <span>{t('Currently importing: {{mod}}', {replace: { mod: progress.mod }})}</span>
+        <span>
+          <h3>{t('Mods are being copied. This might take a while. Thank you for your patience.')}</h3>
+          {t('Currently importing: {{mod}}', {replace: { mod: progress.mod }})}
+        </span>
         <ProgressBar now={perc} label={`${perc}%`} />
       </div>
     );
   }
 
-  private renderReview(): JSX.Element {
-    const { t, profilesVisible, profiles } = this.props;
-    const { failedImports, enableModsOnFinish } = this.state;
+  private hasConflicts(): boolean {
+    const { conflictedMods } = this.state;
+    const imported: IModEntry[] = this.getSuccessfullyImported();
+    if (conflictedMods.length === 0 || imported === undefined || imported.length === 0) {
+      return false;
+    }
 
-    const imported = this.getSuccessfullyImported();
+    const conflicted: IModEntry[] = imported.filter(mod => conflictedMods.find(conf => conf === mod.modName) !== undefined);
+    return conflicted.length > 0 ? true : false;
+  }
 
-    const renderToggle = profilesVisible && imported.length > 0 ? (
-      <Toggle
-          checked={enableModsOnFinish}
-          onToggle={this.toggleEnableOnFinish}
-          style={{ marginTop: 10 }}
-        >
-          <a
-            className='fake-link'
-            title={t('Will enable the imported mods for the selected profile')}
+  private renderEnableModsOnFinishToggle(): JSX.Element {
+    const { t, profilesVisible } = this.props;
+    const { successfullyImported, enableModsOnFinish } = this.state;
+
+    return successfullyImported.length > 0 ? (
+      <div>
+        <Toggle
+            checked={enableModsOnFinish}
+            onToggle={this.toggleEnableOnFinish}
           >
-            {t('Enable mods for selected profile')}
-          </a>
-      </Toggle>
+            <a
+              className='fake-link'
+              title={profilesVisible ? t('Will enable the imported mods for the selected profile') 
+                                    : t('Enable imported mods.')}
+            >
+              {profilesVisible ? t('If toggled, will enable all imported mods for the selected profile.') 
+                              : t('If toggled, will enable all imported mods.')}
+            </a>
+        </Toggle>
+      </div>
     ) : null;
+  }
+
+  private renderReviewSummary(): JSX.Element {
+    const { t, profilesVisible, profiles } = this.props;
+    const { successfullyImported } = this.state;
+    
+    return successfullyImported.length > 0 ? (
+      <div>
+        {t('Your selected mods have been imported successfully. You can decide now ')}
+        {t('whether you would like to enable all imported mods,')} <br/>
+        {t('or whether you want your imported mods to remain disabled for now.')}<br/><br/>
+        {profilesVisible && successfullyImported.length > 0 && profiles !== undefined && this.renderProfiles()}
+        {this.renderEnableModsOnFinishToggle()}
+    </div>
+    ) : null;
+  }
+
+  private renderConflicts() {
+    const { t } = this.props;
+    const hasConflicts: boolean = this.hasConflicts();
+    
+    return (
+      hasConflicts ? (
+        <div>
+          <div className='import-conflict-title'>
+            <Icon name='conflict' />
+            {t('Mod Conflicts:')}
+          </div>
+          
+          {t('Vortex has detected unsolved file conflicts. This is not an error and merely implies that you will have to choose which conflicting mods should')} <br/>
+          {t('overwrite one another - similar to how you decide on overwrites when installing mods with NMM:')}<br/><br/>
+          {this.getLink(_LINKS.FILE_CONFLICTS, 'I am getting a lot of mod conflicts with Vortex that were not there in Nexus Mod Manager. What’s wrong? ')}<br/><br/>
+          {t('Unlike NMM, with Vortex you will be able to change your overwrite decisions dynamically without having to reinstall the mods.')} <br/><br/>
+          {t('You can easily address these file conflicts / overwrites with Vortex\'s ')}
+          {this.getLink(_LINKS.MANAGE_CONFLICTS, 'built-in conflict resolution tools.')} <br/>
+          {t('You can learn more about how to properly address file conflicts and more in ')}
+          {this.getLink(_LINKS.DOCUMENTATION, 'our documentation.')}
+        </div>
+      ) : null
+    );
+  }
+
+  private renderReview(): JSX.Element {
+    const { t } = this.props;
+    const { failedImports } = this.state;
 
     return (
       <div className='import-working-container'>
@@ -820,7 +938,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           failedImports.length === 0
             ? (
               <span className='import-success'>
-                <Icon name='feedback-success' /> {t('Import successful')}
+                <Icon name='feedback-success' /> {t('Import successful')}<br/>
               </span>
             ) : (
               <span className='import-errors'>
@@ -829,13 +947,15 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
             )
         }
         <span className='import-review-text'>
-          {t('You can review the log at')}
-          {' '}
+          {t('You can review the log at: ')}
           <a onClick={this.openLog}>{this.mTrace.logFilePath}</a>
+        </span><br/><br/>
+        <span>
+        {this.renderReviewSummary()}
+        <br/><br/>
+        {this.renderConflicts()}
+        <br/><br/>
         </span>
-
-        {profilesVisible && imported.length > 0 && profiles !== undefined && this.renderProfiles()}
-        {renderToggle}
       </div>
     );
   }

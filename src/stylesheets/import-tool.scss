@@ -20,11 +20,10 @@
   display: flex;
   justify-content: center;
   align-items: center;
-}
-
-.rotating-spinner-icon {
-  width: 5em;
-  height: 5em;
+  svg {
+    width: 5em;
+    height: 5em;
+  }
 }
 
 .import-working-container {
@@ -45,6 +44,31 @@
   }
 }
 
+.import-wont {
+  @extend .h4;
+  svg {
+    fill: $brand-danger;
+    width: 2em;
+    height: 2em;
+  }
+}
+
+.import-conflict-title {
+  @extend .h3;
+  svg {
+    fill: $brand-warning;
+  }
+}
+
+.import-will {
+  @extend .h4;
+  svg {
+    fill: $brand-success;
+    width: 2em;
+    height: 2em;
+  }
+}
+
 .import-errors {
   @extend .h3;
   text-align: center;
@@ -52,6 +76,7 @@
 }
 
 .import-review-text {
+  text-align: center;
   color: $text-color-disabled;
 }
 
