@@ -26,6 +26,12 @@
   }
 }
 
+.import-mods-selection {
+  display: flex;
+  flex-direction: column;
+  height: 90%
+}
+
 .import-working-container {
   flex: 1 1 0;
   display: flex;
