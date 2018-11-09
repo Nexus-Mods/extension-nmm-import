@@ -397,22 +397,31 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     })
   }
 
+  private getProfileText(profile: types.IProfile): string {
+    return profile.name + '/' + profile.id;
+  }
+
   private notifySwitchProfile() {
     const { t, activeProfile } = this.props;
     const {selectedProfile} = this.state;
 
     const openDialog = () => {
       this.context.api.showDialog('info', 'Switch Profile', {
-        bbcode: t(`Your currently active profile is: "${activeProfile.name}/${activeProfile.id}"; you chose to enable ` + 
-                  `the imported mods for a different profile named: "${selectedProfile.profile.name}/${selectedProfile.id}", ` +
+        bbcode: t('The currently active profile is: "{{active}}"; you chose to enable ' + 
+                  'the imported mods for a different profile named: "{{selected}}", ' +
                   'would you like to switch to this profile now? - installer (FOMOD) settings will be preserved<br /><br />' +
                   'Choosing \"Switch Profile\" will switch over to the import profile. ' + 
                   'Choosing "Close" will keep your currently active profile. <br /><br />' +
                   'Please note when switching: although mods will be enabled by default, plugins require you to enable them [b]MANUALLY![/b] ' +
                   'please enable your plugins manually once the profile switch is complete!<br /><br />' +
                   'If you want to switch profiles at a later point in time and need help, please consult our wiki:<br /><br />' + 
-                  '[url]https://wiki.nexusmods.com/index.php/Setting_up_profiles_in_Vortex[/url]' ),
-                  options: { wrap: true },
+                  '[url=https://wiki.nexusmods.com/index.php/Setting_up_profiles_in_Vortex]Setting up profiles in Vortex[/url]', {
+                    replace: {
+                      active: this.getProfileText(activeProfile),
+                      selected: this.getProfileText(selectedProfile.profile),
+                    }
+                  }),
+                options: { wrap: true },
       }, [
         { 
           label: 'Switch Profile', action: () => this.commenceSwitch(selectedProfile.id)
@@ -613,9 +622,15 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     );
   }
 
+  private openLink = (evt: React.MouseEvent<HTMLAnchorElement>) => {
+    evt.preventDefault();
+    const link = evt.currentTarget.getAttribute('data-link');
+    util.opn(link).catch(() => null);
+  }
+
   private getLink(link: string, text: string): JSX.Element {
     const { t } = this.props;
-    return (<a onClick={() => util.opn(link).catch(err => null)}>{t(`${text}`)}</a>);
+    return (<a data-link={link} onClick={this.openLink}>{t(`${text}`)}</a>);
   }
 
   private renderContent(state: Step): JSX.Element {
@@ -713,16 +728,21 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         {t('Please select a profile to import to:')}
         <SplitButton
           id='import-select-profile'
-          title={selectedProfile !== undefined ? selectedProfile.profile.name : 'errr'}
+          title={selectedProfile !== undefined ? selectedProfile.profile.name : 'error'}
           onSelect={this.selectProfile}
           style={{ marginLeft: 15 }}
         >
-          {newProfile === undefined && this.renderDropdownElement('Create New Profile->', '_create_new_profile_')}
-          {this.renderDropdownElement(t('Active Profile: ') + activeProfile.name, '_currently_active_profile_')}
-          {profileList.map(prof => prof.id !== activeProfile.id ? this.renderDropdownElement(prof.name, prof.id) : null)}
+          {newProfile === undefined && this.renderProfileElement(t('Create New Profile'), '_create_new_profile_')}
+          {this.renderProfileElement(t('Active Profile: ') + activeProfile.name, '_currently_active_profile_')}
+          {profileList.map(prof => prof.id !== activeProfile.id ? this.renderProfileElement(prof.name, prof.id) : null)}
         </SplitButton>
       </div>
     );
+  }
+
+  private renderProfileElement = (option, evKey?): JSX.Element => {
+    const key = evKey !== undefined ? evKey : option;
+    return <MenuItem key={key} eventKey={key}>{option}</MenuItem>
   }
 
   private renderNoSources(): JSX.Element {
@@ -751,17 +771,14 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           onSelect={this.selectSource}
           style={{ marginLeft: 15 }}
         >
-          {sources.map(this.renderDropdownElement)}
+          {sources.map(this.renderSource)}
         </SplitButton>
       </div>
     );
   }
 
-  private renderDropdownElement = (option, evKey?) => {
-    const key = evKey !== undefined ? evKey : option;
-    return option.constructor === Array
-      ? <MenuItem key={option} eventKey={key}>{option[0]}</MenuItem>
-      : <MenuItem key={option} eventKey={key}>{option}</MenuItem>
+  private renderSource = option => {
+    return <MenuItem key={option} eventKey={option}>{option[0]}</MenuItem>;
   }
 
   private toggleEnableOnFinish = () => {
@@ -891,13 +908,17 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   private renderReviewSummary(): JSX.Element {
     const { t, profilesVisible, profiles } = this.props;
     const { successfullyImported } = this.state;
+
+    const showProfiles = (profilesVisible && successfullyImported.length > 0 && profiles !== undefined)
+        ? this.renderProfiles()
+        : null;
     
     return successfullyImported.length > 0 ? (
       <div>
         {t('Your selected mods have been imported successfully. You can decide now ')}
         {t('whether you would like to enable all imported mods,')} <br/>
         {t('or whether you want your imported mods to remain disabled for now.')}<br/><br/>
-        {profilesVisible && successfullyImported.length > 0 && profiles !== undefined && this.renderProfiles()}
+        {showProfiles}
         {this.renderEnableModsOnFinishToggle()}
     </div>
     ) : null;
@@ -1015,7 +1036,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private finish() {
     const { activeProfile, gameId } = this.props;
-    const { selectedProfile, enableModsOnFinish } = this.state;
+    const { selectedProfile, enableModsOnFinish, conflictedMods } = this.state;
 
     // We're only interested in the mods we actually managed to import.
     const imported = this.getSuccessfullyImported();
@@ -1042,7 +1063,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       if (activeProfile.id !== selectedProfile.id) {
         this.notifySwitchProfile();
       } else {
-        this.context.api.store.dispatch(actions.setDeploymentNecessary(gameId, true));
+        // Only deploy if we have no conflicts
+        if (conflictedMods.length === 0) {
+          this.context.api.store.dispatch(actions.setDeploymentNecessary(gameId, true));
+        }
       }
     }
 
