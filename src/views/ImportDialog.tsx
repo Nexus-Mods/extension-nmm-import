@@ -142,14 +142,14 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     this.actions = [
       {
         icon: 'checkbox-checked',
-        title: 'Enable',
-        action: this.enableSelected,
+        title: 'Import',
+        action: this.importSelected,
         singleRowAction: false,
       },
       {
         icon: 'checkbox-unchecked',
-        title: 'Disable',
-        action: this.disableSelected,
+        title: 'Don\'t Import',
+        action: this.dontImportSelected,
         singleRowAction: false,
       },
     ];
@@ -222,11 +222,11 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     this.recalculate().catch(err => this.context.api.showErrorNotification('Disk space calculation errors.', err, { allowReport: (err as any).code !== 'ENOENT' }));
   }
 
-  private enableSelected = (entries) => {
+  private importSelected = (entries) => {
     this.onGroupAction(entries, true);
   }
 
-  private disableSelected = (entries) => {
+  private dontImportSelected = (entries) => {
     this.onGroupAction(entries, false);
   }
 
@@ -516,10 +516,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
                 options: { wrap: true },
       }, [
         { 
-          label: t('Switch Profile'), action: () => this.commenceSwitch(selectedProfile.id)
+          label: 'Switch Profile', action: () => this.commenceSwitch(selectedProfile.id)
         },
         {
-          label: t('Close')
+          label: 'Close'
         },
       ]);
     }

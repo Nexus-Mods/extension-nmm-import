@@ -8,6 +8,14 @@
   text-align: center;
 }
 
+.btn-mods-to-import-status-yes, .toggle-mods-to-import-status-yes {
+  background-color: $brand-success;
+}
+
+.btn-mods-to-import-status-no, .toggle-mods-to-import-status-no {
+  background-color: $gray;
+}
+
 #dropdown-mods-to-import-status {
   padding: 2px 5px;
   border: 0px;
