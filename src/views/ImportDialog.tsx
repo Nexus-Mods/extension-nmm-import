@@ -1276,7 +1276,7 @@ function mapStateToProps(state: any): IConnectedProps {
     importStep: state.session.modimport.importStep,
     profilesVisible: state.settings.interface.profilesVisible,
     downloadPath: selectors.downloadPath(state),
-    installPath: selectors.installPathForGame(state, gameId),
+    installPath: gameId !== undefined ? selectors.installPathForGame(state, gameId) : undefined,
     activeProfile: selectors.activeProfile(state),
     profiles: relevantProfiles,
   };
