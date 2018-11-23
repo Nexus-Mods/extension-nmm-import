@@ -28,6 +28,11 @@ import * as Promise from 'bluebird';
 
 type Step = 'start' | 'setup' | 'working' | 'review';
 
+// Used to reduce the amount of detected free space by 500MB.
+//  This is done to avoid situations where the user may be left
+//  with no disk space after the import process is finished.
+const MIN_DISK_SPACE_OFFSET = (500 * (1e+6));
+
 const _LINKS = {
   TO_CONSIDER: 'https://wiki.nexusmods.com/index.php/Importing_from_Nexus_Mod_Manager:_Things_to_consider',
   FOMOD_LINK: 'https://wiki.nexusmods.com/index.php/Importing_from_Nexus_Mod_Manager:_Things_to_consider#Scripted_Installers_.2F_FOMOD_Installers',
@@ -1181,10 +1186,15 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
     this.nextState.selectedProfile = { id: activeProfile.id, profile: activeProfile };;
 
-    modFiles.rootPath = winapi.GetVolumePathName(this.props.installPath);
-    modFiles.totalFreeBytes = winapi.GetDiskFreeSpaceEx(this.props.installPath).free;
-    archiveFiles.rootPath = winapi.GetVolumePathName(this.props.downloadPath);
-    archiveFiles.totalFreeBytes = winapi.GetDiskFreeSpaceEx(this.props.downloadPath).free;
+    try {
+      modFiles.rootPath = winapi.GetVolumePathName(this.props.installPath);
+      modFiles.totalFreeBytes = winapi.GetDiskFreeSpaceEx(this.props.installPath).free - MIN_DISK_SPACE_OFFSET;
+      archiveFiles.rootPath = winapi.GetVolumePathName(this.props.downloadPath);
+      archiveFiles.totalFreeBytes = winapi.GetDiskFreeSpaceEx(this.props.downloadPath).free - MIN_DISK_SPACE_OFFSET;
+    } catch (err) {
+      this.context.api.showErrorNotification('Unable to start import process', err);
+      this.cancel();
+    }
 
     findInstances(this.props.gameId)
       .then(found => {
