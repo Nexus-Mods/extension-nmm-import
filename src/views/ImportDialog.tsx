@@ -1245,7 +1245,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const virtualInstallPath = path.join(selectedSource[0], 'VirtualInstall');
     const nmmLinkPath = (selectedSource[1]) ? path.join(selectedSource[1], gameId, 'NMMLink') : '';
     const modsPath = selectedSource[2];
-    const categoriesPath = path.join(selectedSource[0], 'categories', 'Categories.xml');
+
+    // The categories.xml file seems to be created by NMM inside its defined "modFolder"
+    //  and not inside the virtual folder.
+    const categoriesPath = path.join(modsPath, 'categories', 'Categories.xml');
 
     this.mTrace.initDirectory(selectedSource[0])
       .then(() => getCategories(categoriesPath))
