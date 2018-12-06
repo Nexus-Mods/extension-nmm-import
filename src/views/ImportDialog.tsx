@@ -388,7 +388,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     return fs.statAsync(path.join(mod.archivePath, mod.modFilename))
     .then(stats => {
       return Promise.resolve(stats.size);
-    })
+    }).catch(err => err.code === 'ENOENT' ? Promise.resolve(0) : Promise.reject(err));
   }
 
   private calculateModFilesSize(mod: IModEntry): Promise<number> {
