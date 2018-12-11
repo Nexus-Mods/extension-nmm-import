@@ -1255,15 +1255,15 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       .then(categories => {
         this.mTrace.log('info', 'NMM Mods (count): ' + modList.length +
           ' - Importing (count):' + enabledMods.length);
-        importMods(this.context.api, this.mTrace,
-        virtualInstallPath, nmmLinkPath, modsPath, enabledMods,
-        importArchives, categories, (mod: string, pos: number) => {
-          this.nextState.progress = { mod, pos };
-        })
-        .then(errors => {
-          this.nextState.failedImports = errors;
-          this.props.onSetStep('review');
-        });
+        return importMods(this.context.api, this.mTrace,
+          virtualInstallPath, nmmLinkPath, modsPath, enabledMods,
+          importArchives, categories, (mod: string, pos: number) => {
+            this.nextState.progress = { mod, pos };
+          })
+          .then(errors => {
+            this.nextState.failedImports = errors;
+            this.props.onSetStep('review');
+          });
       })
       .catch(err => {
         this.nextState.error = err.message;
