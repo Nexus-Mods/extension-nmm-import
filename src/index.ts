@@ -4,7 +4,7 @@ import ImportDialog from './views/ImportDialog';
 
 import { app as appIn, remote } from 'electron';
 import * as path from 'path';
-import { fs, types } from 'vortex-api';
+import { fs, types, selectors } from 'vortex-api';
 
 const app = appIn !== undefined ? appIn : remote.app;
 
@@ -30,6 +30,10 @@ function init(context: types.IExtensionContext): boolean {
     return false;
   }
 
+  const gameModeActive = (store) => selectors.activeGameId(store.getState()) !== undefined 
+    ? true
+    : false;
+
   context.registerDialog('nmm-import', ImportDialog);
 
   context.registerReducer(['session', 'modimport'], sessionReducer);
@@ -39,7 +43,7 @@ function init(context: types.IExtensionContext): boolean {
 
   context.registerToDo('import-nmm', 'search', () => ({}), 'import', 'Import from NMM', () => {
     context.api.store.dispatch(setImportStep('start'));
-  }, () => nmmConfigExists(),  '', 100);
+  }, () => nmmConfigExists() && gameModeActive(context.api.store),  '', 100);
 
   context.once(() => {
     context.api.setStylesheet('nmm-import-tool', path.join(__dirname, 'import-tool.scss'));
