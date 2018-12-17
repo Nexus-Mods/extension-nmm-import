@@ -1188,9 +1188,20 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
     try {
       modFiles.rootPath = winapi.GetVolumePathName(this.props.installPath);
-      modFiles.totalFreeBytes = winapi.GetDiskFreeSpaceEx(this.props.installPath).free - MIN_DISK_SPACE_OFFSET;
       archiveFiles.rootPath = winapi.GetVolumePathName(this.props.downloadPath);
-      archiveFiles.totalFreeBytes = winapi.GetDiskFreeSpaceEx(this.props.downloadPath).free - MIN_DISK_SPACE_OFFSET;
+
+      // It is beyond the scope of the disk space calculation logic to check or ensure
+      //  that the installation/download paths exist (this should've been handled before this stage); 
+      //  reason why we're simply going to use the root paths for the calculation.
+      //
+      //  This is arguably a band-aid fix for https://github.com/Nexus-Mods/Vortex/issues/2624; 
+      //  but the only reason why these folders would be missing in the first place is if they 
+      //  have been removed manually or by an external application WHILE Vortex is running!
+      //
+      //  The import process will create these directories when mod/archive files are copied over
+      //  if they're missing.
+      modFiles.totalFreeBytes = winapi.GetDiskFreeSpaceEx(modFiles.rootPath).free - MIN_DISK_SPACE_OFFSET;
+      archiveFiles.totalFreeBytes = winapi.GetDiskFreeSpaceEx(archiveFiles.rootPath).free - MIN_DISK_SPACE_OFFSET;
     } catch (err) {
       this.context.api.showErrorNotification('Unable to start import process', err);
       this.cancel();
