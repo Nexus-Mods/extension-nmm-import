@@ -97,6 +97,14 @@ function importMods(api: types.IExtensionApi,
 
   const errors: string[] = [];
 
+  const transferArchiveFile = (source: string, dest: string, mod: IModEntry, size: number): Promise<void> => {
+    return transferArchive(source, dest).then(() => {
+      store.dispatch(actions.addLocalDownload(
+        mod.archiveId, gameId, mod.modFilename, size));
+      return Promise.resolve();
+    })
+  }
+
   return trace.writeFile('parsedMods.json', JSON.stringify(mods))
     .then(() => {
       trace.log('info', 'transfer unpacked mods files');
@@ -114,12 +122,9 @@ function importMods(api: types.IExtensionApi,
               }
               if (transferArchives) {
                 const archivePath = path.join(mod.archivePath, mod.modFilename);
+                const destination = path.join(downloadPath, mod.modFilename);
                 return fs.statAsync(archivePath)
-                  .then(stats => {
-                    store.dispatch(actions.addLocalDownload(
-                      mod.archiveId, gameId, mod.modFilename, stats.size));
-                    return transferArchive(archivePath, downloadPath);
-                  })
+                  .then(stats => transferArchiveFile(archivePath, destination, mod, stats.size))
                   .catch(err => {
                       trace.log('error', 'Failed to import mod archive',
                                 archivePath + ' - ' + err.message);
