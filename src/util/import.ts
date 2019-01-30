@@ -7,7 +7,7 @@ import { addMods} from './vortexImports';
 import * as Promise from 'bluebird';
 import * as path from 'path';
 import { generate as shortid } from 'shortid';
-import { actions, fs, selectors, types } from 'vortex-api';
+import { actions, fs, selectors, types, util } from 'vortex-api';
 
 function getInner(ele: Element): string {
   if ((ele !== undefined) && (ele !== null)) {
@@ -99,10 +99,26 @@ function importMods(api: types.IExtensionApi,
 
   const transferArchiveFile = (source: string, dest: string, mod: IModEntry, size: number): Promise<void> => {
     return transferArchive(source, dest).then(() => {
+      const downloads = util.getSafe(state, ['persistent', 'downloads', 'files'], undefined);
+      if (downloads === undefined) {
+        // The user hasn't downloaded anything yet.
+        return Promise.resolve();
+      }
+
+      // Ensure we don't have any duplicate archive ids pointing
+      //  to the same localPath - if we do, remove them.
+      const archiveIds = Object.keys(downloads);
+      const filtered = archiveIds.filter(id => downloads[id].localPath === mod.modFilename);
+      filtered.forEach(id => {
+        store.dispatch(actions.removeDownload(id));
+      })
+      return Promise.resolve();
+    })
+    .then(() => {
       store.dispatch(actions.addLocalDownload(
         mod.archiveId, gameId, mod.modFilename, size));
       return Promise.resolve();
-    })
+    });
   }
 
   return trace.writeFile('parsedMods.json', JSON.stringify(mods))
@@ -122,9 +138,8 @@ function importMods(api: types.IExtensionApi,
               }
               if (transferArchives) {
                 const archivePath = path.join(mod.archivePath, mod.modFilename);
-                const destination = path.join(downloadPath, mod.modFilename);
                 return fs.statAsync(archivePath)
-                  .then(stats => transferArchiveFile(archivePath, destination, mod, stats.size))
+                  .then(stats => transferArchiveFile(archivePath, downloadPath, mod, stats.size))
                   .catch(err => {
                       trace.log('error', 'Failed to import mod archive',
                                 archivePath + ' - ' + err.message);
