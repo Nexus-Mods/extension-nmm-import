@@ -1266,17 +1266,20 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       .then(categories => {
         this.mTrace.log('info', 'NMM Mods (count): ' + modList.length +
           ' - Importing (count):' + enabledMods.length);
+        this.context.api.events.emit('enable-download-watch', false);
         return importMods(this.context.api, this.mTrace,
           virtualInstallPath, nmmLinkPath, modsPath, enabledMods,
           importArchives, categories, (mod: string, pos: number) => {
             this.nextState.progress = { mod, pos };
           })
           .then(errors => {
+            this.context.api.events.emit('enable-download-watch', true);
             this.nextState.failedImports = errors;
             this.props.onSetStep('review');
           });
       })
       .catch(err => {
+        this.context.api.events.emit('enable-download-watch', true);
         this.nextState.error = err.message;
       });
   }
