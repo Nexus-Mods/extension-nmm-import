@@ -4,7 +4,7 @@ import ImportDialog from './views/ImportDialog';
 
 import { app as appIn, remote } from 'electron';
 import * as path from 'path';
-import { fs, types, selectors } from 'vortex-api';
+import { fs, selectors, types } from 'vortex-api';
 
 const app = appIn !== undefined ? appIn : remote.app;
 

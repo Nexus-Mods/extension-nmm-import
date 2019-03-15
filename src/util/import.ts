@@ -42,11 +42,9 @@ function enhance(sourcePath: string, input: IModEntry,
                       || getInner(xmlDoc.querySelector('fomod CategoryId'));
       const category = categoryId !== undefined ? nmmCategories[categoryId] : undefined;
 
-      if (category !== undefined) {
-        categoryId = vortexCategory(category);
-      } else {
-        categoryId = undefined;
-      }
+      categoryId = (category !== undefined)
+        ? vortexCategory(category)
+        : undefined;
 
       return {
         ...input,
@@ -82,7 +80,8 @@ function importMods(api: types.IExtensionApi,
 
     if (vortexCategories['nmm_0'] === undefined) {
       trace.log('info', 'Adding root for imported NMM categories');
-      store.dispatch(actions.setCategory(gameId, 'nmm_0', { name: 'Imported from NMM', order: 0, parentCategory: undefined }))
+      store.dispatch(actions.setCategory(gameId, 'nmm_0',
+        { name: 'Imported from NMM', order: 0, parentCategory: undefined }));
     }
 
     let id = 1;
@@ -91,9 +90,10 @@ function importMods(api: types.IExtensionApi,
     }
 
     trace.log('info', 'NMM category couldn\'t be matched, importing', name);
-    store.dispatch(actions.setCategory(gameId, `nmm_${id}`, { name, order: 0, parentCategory: 'nmm_0' }))
+    store.dispatch(actions.setCategory(gameId, `nmm_${id}`,
+      { name, order: 0, parentCategory: 'nmm_0' }));
     return `nmm_${id}`;
-  }
+  };
 
   const errors: string[] = [];
 
@@ -111,7 +111,7 @@ function importMods(api: types.IExtensionApi,
       const filtered = archiveIds.filter(id => downloads[id].localPath === mod.modFilename);
       filtered.forEach(id => {
         store.dispatch(actions.removeDownload(id));
-      })
+      });
       return Promise.resolve();
     })
     .then(() => {
@@ -119,7 +119,7 @@ function importMods(api: types.IExtensionApi,
         mod.archiveId, gameId, mod.modFilename, size));
       return Promise.resolve();
     });
-  }
+  };
 
   return trace.writeFile('parsedMods.json', JSON.stringify(mods))
     .then(() => {

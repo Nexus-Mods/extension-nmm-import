@@ -136,7 +136,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           totalFreeBytes: 0,
         },
       },
-      
+
       selectedProfile: undefined,
       enableModsOnFinish: true,
       newProfile: undefined,
@@ -196,7 +196,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           if (!mod.isAlreadyManaged) {
             this.mDebouncer.schedule(err => {
               if (err) {
-                this.context.api.showErrorNotification('Failed to validate mod file', err, { allowReport: (err as any).code !== 'ENOENT' })
+                this.context.api.showErrorNotification('Failed to validate mod file', err,
+                  { allowReport: (err as any).code !== 'ENOENT' });
               }
             }, mod);
           } else {
@@ -205,6 +206,66 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         },
       },
     };
+  }
+
+  public componentWillReceiveProps(newProps: IProps) {
+    if (this.props.importStep !== newProps.importStep) {
+      if (newProps.importStep === 'start') {
+        this.start();
+      } else if (newProps.importStep === 'setup') {
+        this.setup();
+      } else if (newProps.importStep === 'working') {
+        this.startImport();
+      } else if (newProps.importStep === 'review') {
+        this.nextState.successfullyImported = this.getSuccessfullyImported();
+      }
+    }
+  }
+
+  public render(): JSX.Element {
+    const { t, importStep } = this.props;
+    const { error, sources, capacityInformation,
+            importArchives, hasCalculationErrors } = this.state;
+
+    const canCancel = ['start', 'setup'].indexOf(importStep) !== -1;
+    const nextLabel = ((sources !== undefined) && (sources.length > 0))
+      ? this.nextLabel(importStep)
+      : undefined;
+
+    const onClick = () => importStep !== 'review'
+      ? this.next()
+      : this.finish();
+
+    let merged: ICapacityInfo;
+    if (this.isIdenticalRootPath()) {
+      merged = {
+        desc: '',
+        rootPath: capacityInformation.modFiles.rootPath,
+        totalFreeBytes: capacityInformation.modFiles.totalFreeBytes,
+        totalNeededBytes: capacityInformation.modFiles.totalNeededBytes 
+                        + capacityInformation.archiveFiles.totalNeededBytes,
+      };
+    }
+    return (
+      <Modal id='import-dialog' show={importStep !== undefined} onHide={this.nop}>
+        <Modal.Header>
+          <Modal.Title>{t('Nexus Mod Manager (NMM) Import Tool')}</Modal.Title>
+          {this.renderCurrentStep()}
+        </Modal.Header>
+        <Modal.Body style={{ height: '60vh', display: 'flex', flexDirection: 'column' }}>
+          {error !== undefined ? <Alert>{error}</Alert> : this.renderContent(importStep)}
+        </Modal.Body>
+        <Modal.Footer>
+          {importStep === 'setup' && (merged !== undefined ? this.getCapacityInfo(merged) : this.getCapacityInfo(capacityInformation.modFiles))}
+          {importStep === 'setup' && importArchives && !this.isIdenticalRootPath() && this.getCapacityInfo(capacityInformation.archiveFiles)}
+          {importStep === 'setup' && hasCalculationErrors && <p className='calculation-error'>{t('Vortex cannot validate NMM\'s mod/archive files - this usually occurs when the NMM configuration is corrupt')}</p>}
+          {canCancel ? <Button onClick={this.cancel}>{t('Cancel')}</Button> : null}
+          { nextLabel ? (
+            <Button disabled={this.isNextDisabled()} onClick={onClick}>{nextLabel}</Button>
+           ) : null }
+        </Modal.Footer>
+      </Modal>
+    );
   }
 
   private onGroupAction(entries: string[], enable: boolean) {
@@ -224,7 +285,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       this.nextState.importEnabled[key] = enable;
     });
 
-    this.recalculate().catch(err => this.context.api.showErrorNotification('Disk space calculation errors.', err, { allowReport: (err as any).code !== 'ENOENT' }));
+    this.recalculate()
+      .catch(err =>
+        this.context.api.showErrorNotification('Disk space calculation errors.', err,
+        { allowReport: (err as any).code !== 'ENOENT' }));
   }
 
   private importSelected = (entries) => {
@@ -249,16 +313,16 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       const isImportEnabled = (mod: IModEntry): boolean => {
         return ((this.nextState.importEnabled[mod.modFilename] !== false) &&
           !((this.nextState.importEnabled[mod.modFilename] === undefined) && mod.isAlreadyManaged));
-      }
+      };
 
       this.nextState.hasCalculationErrors = false;
-      let modList = Object.keys(modsToImport)
+      const modList = Object.keys(modsToImport)
         .map(id => modsToImport[id])
         .filter(entry => isImportEnabled(entry) && !entry.isAlreadyManaged);
 
       const getArchiveSize = (mod) => {
         return importArchives ? this.calculateArchiveSize(mod) : 0;
-      }
+      };
 
       // Reset the required number of bytes properties.
       modFiles.totalNeededBytes = 0;
@@ -266,18 +330,18 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
       this.nextState.isCalculating[calcKey] = true;
       return Promise.map(modList, mod => {
-        return Promise.all([this.calculateModFilesSize(mod), 
+        return Promise.all([this.calculateModFilesSize(mod),
           getArchiveSize(mod)]).then(results => {
             modFiles.totalNeededBytes += results[0];
             archiveFiles.totalNeededBytes += results[1];
-        })
+        });
       }).then(() => {
         this.nextState.isCalculating[calcKey] = false;
         return resolve();
       }).catch(err => {
         this.nextState.hasCalculationErrors = true;
         this.nextState.isCalculating[calcKey] = false;
-        return reject(err)
+        return reject(err);
       });
     });
   }
@@ -309,8 +373,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         this.nextState.isCalculating[calcKey] = false;
         return resolve();
       }).catch(err => {
-        this.nextState.hasCalculationErrors = true
-        return reject(err); 
+        this.nextState.hasCalculationErrors = true;
+        return reject(err);
       });
     });
   }
@@ -326,18 +390,18 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       const calcKey = 'startUp';
 
       this.nextState.hasCalculationErrors = false;
-      let modList = Object.keys(modsToImport)
+      const modList = Object.keys(modsToImport)
         .map(id => modsToImport[id])
         .filter(entry => this.isModEnabled(entry) && !entry.isAlreadyManaged);
 
       this.nextState.isCalculating[calcKey] = true;
       this.setTotalBytesNeeded(modList).then(() => {
-        this.nextState.isCalculating[calcKey] = false
+        this.nextState.isCalculating[calcKey] = false;
         return resolve();
       }).catch(err => {
-        this.nextState.isCalculating[calcKey] = false
+        this.nextState.isCalculating[calcKey] = false;
         this.nextState.hasCalculationErrors = true;
-        return reject(err)
+        return reject(err);
       });
     });
   }
@@ -347,12 +411,12 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       const { importArchives } = this.nextState;
       const { modFiles, archiveFiles } = this.nextState.capacityInformation;
       const calcKey = 'onChange';
-      const getArchiveSize = (mod) => {
+      const getArchiveSize = () => {
         return importArchives ? this.calculateArchiveSize(mod) : 0;
-      }
+      };
 
       this.nextState.isCalculating[calcKey] = true;
-      Promise.all([this.calculateModFilesSize(mod), getArchiveSize(mod)])
+      Promise.all([this.calculateModFilesSize(mod), getArchiveSize()])
       .then(results => {
         let modified: number[] = results;
         if (!this.nextState.importEnabled[mod.modFilename]) {
@@ -365,7 +429,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         this.nextState.isCalculating[calcKey] = false;
         return resolve();
       }).catch(err => reject(err));
-    })
+    });
   }
 
   private setTotalBytesNeeded(modList: IModEntry[]): Promise<void> {
@@ -376,11 +440,11 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     archiveFiles.totalNeededBytes = 0;
 
     return Promise.map(modList, mod => {
-      return Promise.all([this.calculateModFilesSize(mod), 
+      return Promise.all([this.calculateModFilesSize(mod),
         this.calculateArchiveSize(mod)]).then(results => {
           modFiles.totalNeededBytes += results[0];
           archiveFiles.totalNeededBytes += results[1];
-      })
+      });
     }).then(() => Promise.resolve()).catch(err => Promise.reject(err));
   }
 
@@ -398,7 +462,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       // Given that we're reading through the file entries, this
       //  is a good point to check whether the NMM installation had
       //  any file conflicts.
-      // 
+      //
       // It's important to note that this logic will not execute when/if the
       //  user decides to import a mod which is already managed by Vortex
       //  but that is arguably acceptable given that the user may already have
@@ -412,41 +476,26 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       const filePath = path.join(selectedSource[0], 'VirtualInstall', file.fileSource);
       return fs.statAsync(filePath);
     }).then(stats => {
-      let sum = stats.reduce((previous, stat) => previous + stat.size, 0);
+      const sum = stats.reduce((previous, stat) => previous + stat.size, 0);
       return Promise.resolve(sum);
-    })
-  }
-
-  public componentWillReceiveProps(newProps: IProps) {
-    if (this.props.importStep !== newProps.importStep) {
-      if (newProps.importStep === 'start') {
-        this.start();
-      } else if (newProps.importStep === 'setup') {
-        this.setup();
-      } else if (newProps.importStep === 'working') {
-        this.startImport();
-      } else if (newProps.importStep === 'review') {
-        this.nextState.successfullyImported = this.getSuccessfullyImported();
-      }
-    }
+    });
   }
 
   private commenceSwitch(profileId: string) {
     const { profiles } = this.props;
     const store = this.context.api.store;
 
-    const isValidProfile = (profileId: string): boolean => {
+    const isValidProfile = (): boolean => {
       return Object.keys(profiles).filter(id => id === profileId) !== undefined;
-    }
-    
-    if (profileId !== undefined && isValidProfile(profileId)) {
+    };
+
+    if (profileId !== undefined && isValidProfile()) {
       store.dispatch((actions as any).setNextProfile(profileId));
-      //store.dispatch(actions as any).setDeploymentNecessary(gameId, true);
     }
   }
 
   // To be used after the import process finished. Will return
-  //  an array containing successfully imported mods. This will 
+  //  an array containing successfully imported mods. This will
   //  ignore archive import errors as the mods should still
   //  be deployable even if the archives encountered issues.
   private getSuccessfullyImported(): IModEntry[] {
@@ -459,7 +508,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       return enabledMods;
     }
 
-    return enabledMods.filter(mod => failedImports.find(fail => fail === mod.modName) === undefined);
+    return enabledMods.filter(mod =>
+      failedImports.find(fail => fail === mod.modName) === undefined);
   }
 
   private createANewProfile(): Promise<types.IProfile> {
@@ -479,7 +529,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         if (result.action === t('Create Profile')) {
           const newProf: types.IProfile = {
             id: newId,
-            gameId: gameId,
+            gameId,
             name: result.input.profileName,
             modState: {},
             lastActivated: 0,
@@ -504,7 +554,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
     const openDialog = () => {
       this.context.api.showDialog('info', 'Switch Profile', {
-        bbcode: t('The currently active profile is: "{{active}}"; you chose to enable ' + 
+        bbcode: t('The currently active profile is: "{{active}}"; you chose to enable ' +
                   'the imported mods for a different profile named: "{{selected}}", ' +
                   'would you like to switch to this profile now? - installer (FOMOD) settings will be preserved<br /><br />' +
                   'Choosing \"Switch Profile\" will switch over to the import profile. ' + 
@@ -516,15 +566,15 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
                     replace: {
                       active: this.getProfileText(activeProfile),
                       selected: this.getProfileText(selectedProfile.profile),
-                    }
+                    },
                   }),
                 options: { wrap: true },
       }, [
-        { 
+        {
           label: 'Switch Profile', action: () => this.commenceSwitch(selectedProfile.id)
         },
         {
-          label: 'Close'
+          label: 'Close',
         },
       ]);
     }
@@ -573,51 +623,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     );
   }
 
-  public render(): JSX.Element {
-    const { t, importStep } = this.props;
-    const { error, sources, capacityInformation, importArchives, hasCalculationErrors } = this.state;
-
-    const canCancel = ['start', 'setup'].indexOf(importStep) !== -1;
-    const nextLabel = ((sources !== undefined) && (sources.length > 0))
-      ? this.nextLabel(importStep)
-      : undefined;
-
-    const onClick = () => importStep !== 'review'
-      ? this.next()
-      : this.finish();
-
-    let merged: ICapacityInfo = undefined;
-    if (this.isIdenticalRootPath()) {
-      merged = {
-        desc: '',
-        rootPath: capacityInformation.modFiles.rootPath,
-        totalFreeBytes: capacityInformation.modFiles.totalFreeBytes,
-        totalNeededBytes: capacityInformation.modFiles.totalNeededBytes 
-                        + capacityInformation.archiveFiles.totalNeededBytes,
-      };
-    }
-    return (
-      <Modal id='import-dialog' show={importStep !== undefined} onHide={this.nop}>
-        <Modal.Header>
-          <Modal.Title>{t('Nexus Mod Manager (NMM) Import Tool')}</Modal.Title>
-          {this.renderCurrentStep()}
-        </Modal.Header>
-        <Modal.Body style={{ height: '60vh', display: 'flex', flexDirection: 'column' }}>
-          {error !== undefined ? <Alert>{error}</Alert> : this.renderContent(importStep)}
-        </Modal.Body>
-        <Modal.Footer>
-          {importStep === 'setup' && (merged !== undefined ? this.getCapacityInfo(merged) : this.getCapacityInfo(capacityInformation.modFiles))}
-          {importStep === 'setup' && importArchives && !this.isIdenticalRootPath() && this.getCapacityInfo(capacityInformation.archiveFiles)}
-          {importStep === 'setup' && hasCalculationErrors && <p className='calculation-error'>{t('Vortex cannot validate NMM\'s mod/archive files - this usually occurs when the NMM configuration is corrupt')}</p>}
-          {canCancel ? <Button onClick={this.cancel}>{t('Cancel')}</Button> : null}
-          { nextLabel ? (
-            <Button disabled={this.isNextDisabled()} onClick={onClick}>{nextLabel}</Button>
-           ) : null }
-        </Modal.Footer>
-      </Modal>
-    );
-  }
-
   private isBusyCalculating(): boolean {
     const { isCalculating } = this.state;
     const calcList = Object.keys(isCalculating).map(id => isCalculating[id]);
@@ -642,8 +647,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
    */
   private testCapacityInfoBreaches(): boolean {
     const { capacityInformation } = this.state;
-    let capList = Object.keys(capacityInformation).map(id => capacityInformation[id]);
-    
+    const capList = Object.keys(capacityInformation).map(id => capacityInformation[id]);
+
     if (capList.find(cap => cap.totalNeededBytes > cap.totalFreeBytes) !== undefined) {
       return true;
     }
@@ -674,11 +679,11 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   private isNextDisabled = () => {
     const { importStep } = this.props;
     const { error, modsToImport } = this.state;
-    
+
     const enabled = modsToImport !== undefined 
       ? Object.keys(modsToImport).filter(id => this.isModEnabled(modsToImport[id]))
       : [];
-    
+
     return (error !== undefined)
         || ((importStep === 'setup') && (modsToImport === undefined))
         || ((importStep === 'setup') && (enabled.length === 0))
@@ -887,7 +892,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const { t } = this.props;
     const { importArchives } = this.state;
     const newVal = !importArchives;
-    this.onToggleArchive(newVal).catch(err => this.context.api.showErrorNotification(t('Failed to validate archive file'), err, { allowReport: (err as any).code !== 'ENOENT' }));
+    this.onToggleArchive(newVal)
+      .catch(err => this.context.api.showErrorNotification(t('Failed to validate archive file'),
+        err, { allowReport: (err as any).code !== 'ENOENT' }));
     this.nextState.importArchives = newVal;
   }
 
@@ -897,12 +904,13 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     if (modsToImport === undefined) {
       return Promise.resolve(0);
     }
-    const modList = Object.keys(modsToImport).map(id => modsToImport[id]).filter(mod => this.isModEnabled(mod) && !mod.isAlreadyManaged);
+    const modList = Object.keys(modsToImport).map(id =>
+      modsToImport[id]).filter(mod => this.isModEnabled(mod) && !mod.isAlreadyManaged);
     return Promise.map(modList, mod => {
       return this.calculateArchiveSize(mod);
     }).then(results => {
       return results.reduce((previous, res) => previous + res, 0);
-    })
+    });
   }
 
   private renderSelectMods(): JSX.Element {
@@ -1007,10 +1015,12 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const { t, profilesVisible, profiles } = this.props;
     const { successfullyImported } = this.state;
 
-    const showProfiles = (profilesVisible && successfullyImported.length > 0 && profiles !== undefined)
+    const showProfiles = (profilesVisible
+      && (successfullyImported.length > 0)
+      && (profiles !== undefined))
         ? this.renderProfiles()
         : null;
-    
+
     return successfullyImported.length > 0 ? (
       <div>
         {t('Your selected mods have been imported successfully. You can decide now ')}
@@ -1025,7 +1035,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   private renderConflicts() {
     const { t } = this.props;
     const hasConflicts: boolean = this.hasConflicts();
-    
+
     return (
       hasConflicts ? (
         <div>
@@ -1114,7 +1124,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       const profList = Object.keys(profiles).map(id => profiles[id]);
       const prof = profList.find(profile => profile.id === eventKey);
 
-      prof !== undefined 
+      (prof !== undefined)
         ? this.nextState.selectedProfile = { id: prof.id, profile: prof }
         : this.context.api.showErrorNotification(t('Failed to select profile'), null);
     }
@@ -1149,7 +1159,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const store = this.context.api.store;
     const state = store.getState();
 
-    // Check whether the user wants Vortex to automatically enable the mods 
+    // Check whether the user wants Vortex to automatically enable the mods
     //  he imported from NMM, and if so, enable the mods for the selected
     //  profile.
     if (enableModsOnFinish) {
@@ -1191,7 +1201,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       archiveFiles.rootPath = winapi.GetVolumePathName(this.props.downloadPath);
 
       // It is beyond the scope of the disk space calculation logic to check or ensure
-      //  that the installation/download paths exist (this should've been handled before this stage); 
+      //  that the installation/download paths exist (this should've been handled before this stage);
       //  reason why we're simply going to use the root paths for the calculation.
       //
       //  This is arguably a band-aid fix for https://github.com/Nexus-Mods/Vortex/issues/2624; 
@@ -1288,9 +1298,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 function mapStateToProps(state: any): IConnectedProps {
   const gameId = selectors.activeGameId(state);
   const profiles: {[id: string]: types.IProfile} = util.getSafe(state, ['persistent', 'profiles'], undefined);
-  
+
   // Worried about how the below bit may affect performance...
-  let relevantProfiles: {[id: string]: types.IProfile} = {};
+  const relevantProfiles: {[id: string]: types.IProfile} = {};
   profiles !== undefined
     ? Object.keys(profiles)
       .map(id => profiles[id])
@@ -1299,7 +1309,7 @@ function mapStateToProps(state: any): IConnectedProps {
     : {};
 
   return {
-    gameId: gameId,
+    gameId,
     importStep: state.session.modimport.importStep,
     profilesVisible: state.settings.interface.profilesVisible,
     downloadPath: selectors.downloadPath(state),
