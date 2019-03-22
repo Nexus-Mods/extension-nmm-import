@@ -211,6 +211,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   public componentWillReceiveProps(newProps: IProps) {
     if (this.props.importStep !== newProps.importStep) {
       if (newProps.importStep === 'start') {
+        this.nextState.modsToImport = undefined;
         this.start();
       } else if (newProps.importStep === 'setup') {
         this.setup();
@@ -1246,7 +1247,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       .catch(err => {
         this.nextState.error = err.message;
       }).finally(() => {
-        this.onStartUp().catch(err => this.context.api.showErrorNotification('StartUp sequence failed to calculate bytes required', err, { allowReport: (err as any).code !== 'ENOENT' }));
+        this.onStartUp().catch(err => this.context.api.showErrorNotification('failed to calculate size required',
+          err, { allowReport: (err as any).code !== 'ENOENT' }));
       });
   }
 
