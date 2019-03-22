@@ -150,7 +150,7 @@ function importMods(api: types.IExtensionApi,
         })
           .then(() => {
             trace.log('info', 'Finished transferring unpacked mod files');
-            addMods(gameId, modsEx, api.store.dispatch);
+            addMods(gameId, modsEx, api);
           }));
     })
     .then(() => {

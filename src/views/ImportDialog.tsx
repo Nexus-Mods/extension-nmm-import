@@ -79,7 +79,7 @@ interface IComponentState {
   failedImports: string[];
 
   isCalculating: { [id: string]: boolean };
-  capacityInformation: { [id:string]: ICapacityInfo };
+  capacityInformation: { [id: string]: ICapacityInfo };
   hasCalculationErrors: boolean;
 
   // Array to hold conflicted mod names.
