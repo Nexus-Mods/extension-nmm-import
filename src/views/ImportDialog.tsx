@@ -1192,14 +1192,14 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private start() {
     const { modFiles, archiveFiles } = this.nextState.capacityInformation;
-    const { activeProfile } = this.props;
+    const { activeProfile, downloadPath, installPath } = this.props;
     this.nextState.error = undefined;
 
     this.nextState.selectedProfile = { id: activeProfile.id, profile: activeProfile };;
 
     try {
-      modFiles.rootPath = winapi.GetVolumePathName(this.props.installPath);
-      archiveFiles.rootPath = winapi.GetVolumePathName(this.props.downloadPath);
+      modFiles.rootPath = winapi.GetVolumePathName(installPath);
+      archiveFiles.rootPath = winapi.GetVolumePathName(downloadPath);
 
       // It is beyond the scope of the disk space calculation logic to check or ensure
       //  that the installation/download paths exist (this should've been handled before this stage);
@@ -1214,7 +1214,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       modFiles.totalFreeBytes = winapi.GetDiskFreeSpaceEx(modFiles.rootPath).free - MIN_DISK_SPACE_OFFSET;
       archiveFiles.totalFreeBytes = winapi.GetDiskFreeSpaceEx(archiveFiles.rootPath).free - MIN_DISK_SPACE_OFFSET;
     } catch (err) {
-      this.context.api.showErrorNotification('Unable to start import process', err);
+      this.context.api.showErrorNotification('Unable to start import process', err, {
+        // don't allow report on "not found" and permission errors
+        allowReport: [2, 3, 5].indexOf(err.errno) === -1,
+      });
       this.cancel();
     }
 
