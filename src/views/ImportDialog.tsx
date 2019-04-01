@@ -211,7 +211,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   public componentWillReceiveProps(newProps: IProps) {
     if (this.props.importStep !== newProps.importStep) {
       if (newProps.importStep === 'start') {
-        this.nextState.modsToImport = undefined;
+        this.resetStateData();
         this.start();
       } else if (newProps.importStep === 'setup') {
         this.setup();
@@ -278,6 +278,40 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         </Modal.Footer>
       </Modal>
     );
+  }
+
+  // Reset all previously set data.
+  private resetStateData() {
+    this.nextState.sources = undefined;
+    this.nextState.importArchives = true;
+    this.nextState.modsToImport = undefined;
+    this.nextState.selectedSource = [];
+    this.nextState.error = undefined;
+    this.nextState.importEnabled = {};
+    this.nextState.counter = 0;
+    this.nextState.progress = undefined;
+    this.nextState.failedImports = [];
+    this.nextState.hasCalculationErrors = false;
+    this.nextState.isCalculating = {};
+    this.nextState.capacityInformation = {
+      modFiles: {
+        desc: 'Mod Files',
+        rootPath: '',
+        totalNeededBytes: 0,
+        totalFreeBytes: 0,
+      },
+      archiveFiles: {
+        desc: 'Archive Files',
+        rootPath: '',
+        totalNeededBytes: 0,
+        totalFreeBytes: 0,
+      },
+    };
+    this.nextState.selectedProfile = undefined;
+    this.nextState.enableModsOnFinish = true;
+    this.nextState.newProfile = undefined;
+    this.nextState.conflictedMods = [];
+    this.nextState.successfullyImported = [];
   }
 
   private onGroupAction(entries: string[], enable: boolean) {
@@ -1299,7 +1333,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         this.nextState.error = err.message;
       }).finally(() => {
         this.onStartUp().catch(err =>
-          this.context.api.showErrorNotification('failed to calculate size required',
+          this.context.api.showErrorNotification('failed to calculate required disk space',
           err, { allowReport: (err as any).code !== 'ENOENT' }));
       });
   }
