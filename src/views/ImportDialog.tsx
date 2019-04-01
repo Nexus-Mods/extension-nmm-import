@@ -4,12 +4,12 @@ import { IModEntry } from '../types/nmmEntries';
 import { getCategories } from '../util/categories';
 import findInstances from '../util/findInstances';
 import importMods from '../util/import';
-import { enableModsForProfile } from '../util/vortexImports';
 import parseNMMConfigFile from '../util/nmmVirtualConfigParser';
+import { enableModsForProfile } from '../util/vortexImports';
 
-import TraceImport from '../util/TraceImport';
-import * as winapi from 'winapi-bindings';
 import { generate as shortid } from 'shortid';
+import * as winapi from 'winapi-bindings';
+import TraceImport from '../util/TraceImport';
 
 import {
   FILENAME, FILES, LOCAL, MOD_ID, MOD_NAME, MOD_VERSION,
@@ -21,8 +21,8 @@ import { Alert, Button, MenuItem, ProgressBar, SplitButton } from 'react-bootstr
 import { translate } from 'react-i18next';
 import { connect } from 'react-redux';
 import * as Redux from 'redux';
-import { ComponentEx, Icon, Modal, selectors, Spinner, Steps, Table, fs,
-         Toggle, types, util, actions, ITableRowAction } from 'vortex-api';
+import { actions, ComponentEx, fs, Icon, ITableRowAction, Modal,
+         selectors, Spinner, Steps, Table, Toggle, types, util } from 'vortex-api';
 
 import * as Promise from 'bluebird';
 
@@ -40,7 +40,7 @@ const _LINKS = {
   FILE_CONFLICTS: 'https://wiki.nexusmods.com/index.php/File_Conflicts:_Nexus_Mod_Manager_vs_Vortex',
   MANAGE_CONFLICTS: 'https://wiki.nexusmods.com/index.php/Managing_File_Conflicts',
   DOCUMENTATION: 'https://wiki.nexusmods.com/index.php/Category:Vortex',
-}
+};
 
 interface IConnectedProps {
   gameId: string;
@@ -243,8 +243,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         desc: '',
         rootPath: capacityInformation.modFiles.rootPath,
         totalFreeBytes: capacityInformation.modFiles.totalFreeBytes,
-        totalNeededBytes: capacityInformation.modFiles.totalNeededBytes 
-                        + capacityInformation.archiveFiles.totalNeededBytes,
+        totalNeededBytes: capacityInformation.modFiles.totalNeededBytes +
+                          capacityInformation.archiveFiles.totalNeededBytes,
       };
     }
     return (
@@ -257,9 +257,20 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           {error !== undefined ? <Alert>{error}</Alert> : this.renderContent(importStep)}
         </Modal.Body>
         <Modal.Footer>
-          {importStep === 'setup' && (merged !== undefined ? this.getCapacityInfo(merged) : this.getCapacityInfo(capacityInformation.modFiles))}
-          {importStep === 'setup' && importArchives && !this.isIdenticalRootPath() && this.getCapacityInfo(capacityInformation.archiveFiles)}
-          {importStep === 'setup' && hasCalculationErrors && <p className='calculation-error'>{t('Vortex cannot validate NMM\'s mod/archive files - this usually occurs when the NMM configuration is corrupt')}</p>}
+          {importStep === 'setup'
+            && (merged !== undefined
+              ? this.getCapacityInfo(merged)
+              : this.getCapacityInfo(capacityInformation.modFiles))}
+          {importStep === 'setup'
+            && importArchives
+            && !this.isIdenticalRootPath()
+            && this.getCapacityInfo(capacityInformation.archiveFiles)}
+          {importStep === 'setup'
+            && hasCalculationErrors
+            && <p className='calculation-error'>
+                {t('Vortex cannot validate NMM\'s mod/archive files - this usually occurs when '
+                 + 'the NMM configuration is corrupt')}
+              </p>}
           {canCancel ? <Button onClick={this.cancel}>{t('Cancel')}</Button> : null}
           { nextLabel ? (
             <Button disabled={this.isNextDisabled()} onClick={onClick}>{nextLabel}</Button>
@@ -534,15 +545,15 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
             name: result.input.profileName,
             modState: {},
             lastActivated: 0,
-          }
+          };
           onCreateProfile(newProf);
           this.nextState.newProfile = newProf;
           return resolve(newProf);
         } else {
           return resolve(activeProfile);
         }
-      })
-    })
+      });
+    });
   }
 
   private getProfileText(profile: types.IProfile): string {
@@ -557,33 +568,39 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       this.context.api.showDialog('info', 'Switch Profile', {
         bbcode: t('The currently active profile is: "{{active}}"; you chose to enable ' +
                   'the imported mods for a different profile named: "{{selected}}", ' +
-                  'would you like to switch to this profile now? - installer (FOMOD) settings will be preserved<br /><br />' +
-                  'Choosing \"Switch Profile\" will switch over to the import profile. ' + 
+                  'would you like to switch to this profile now? - installer (FOMOD) ' +
+                  'settings will be preserved<br /><br />' +
+                  'Choosing \"Switch Profile\" will switch over to the import profile. ' +
                   'Choosing "Close" will keep your currently active profile. <br /><br />' +
-                  'Please note when switching: although mods will be enabled by default, plugins require you to enable them [b]MANUALLY![/b] ' +
-                  'please enable your plugins manually once the profile switch is complete!<br /><br />' +
-                  'If you want to switch profiles at a later point in time and need help, please consult our wiki:<br /><br />' + 
-                  '[url=https://wiki.nexusmods.com/index.php/Setting_up_profiles_in_Vortex]Setting up profiles in Vortex[/url]', {
+                  'Please note when switching: although mods will be enabled by default, ' +
+                  'plugins require you to enable them [b]MANUALLY![/b] please enable your ' +
+                  'plugins manually once the profile switch is complete!<br /><br />' +
+                  'If you want to switch profiles at a later point in time and need help, ' +
+                  'please consult our wiki:<br /><br />' +
+                  '[url=https://wiki.nexusmods.com/index.php/Setting_up_profiles_in_Vortex]' +
+                  'Setting up profiles in Vortex[/url]',
+                  {
                     replace: {
                       active: this.getProfileText(activeProfile),
                       selected: this.getProfileText(selectedProfile.profile),
                     },
                   }),
-                options: { wrap: true },
+        options: { wrap: true },
       }, [
         {
-          label: 'Switch Profile', action: () => this.commenceSwitch(selectedProfile.id)
+          label: 'Switch Profile', action: () => this.commenceSwitch(selectedProfile.id),
         },
         {
           label: 'Close',
         },
       ]);
-    }
+    };
 
     this.context.api.sendNotification({
       type: 'info',
       title: t('Switch Profile'),
-      message: t('A new NMM profile has been created as part of the import process. Switch to the newly created profile?'),
+      message: t('A new NMM profile has been created as part of the import process. Switch to '
+               + 'the newly created profile?'),
       noDismiss: true,
       actions: [
         {
@@ -634,15 +651,15 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   /**
-   * Runs all necessary capacity information checks for disabling the import button. 
+   * Runs all necessary capacity information checks for disabling the import button.
    *  Checks will include:
    *  - Ensure that all ICapacityInformation objects do not surpass the number
    *    of free bytes available on their target partition.
-   * 
+   *
    *  - Compare root paths between archive files and mod files.
    *    If both entries are installed on the same partition, we need to ensure
-   *    that there's enough space for both to install on that drive. 
-   * 
+   *    that there's enough space for both to install on that drive.
+   *
    * @returns True if a "breach" is confirmed and we want the import button to be disabled.
    *          False if it's safe for the user to click the import button.
    */
@@ -664,7 +681,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   /**
    * @returns True if modFiles and archiveFiles are on the same disk drive AND
    *  the sum of both capacityInfo objects surpasses the amount of free space.
-   * 
+   *
    * ....Naming stuff is hard....
    */
   private testSumBreach(): boolean {
@@ -672,7 +689,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     if (modFiles.rootPath === archiveFiles.rootPath) {
       if ((modFiles.totalNeededBytes + archiveFiles.totalNeededBytes) > modFiles.totalFreeBytes) {
         return true;
-      } 
+      }
     }
     return false;
   }
@@ -681,7 +698,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const { importStep } = this.props;
     const { error, modsToImport } = this.state;
 
-    const enabled = modsToImport !== undefined 
+    const enabled = (modsToImport !== undefined)
       ? Object.keys(modsToImport).filter(id => this.isModEnabled(modsToImport[id]))
       : [];
 
@@ -750,8 +767,12 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const { t, profilesVisible } = this.props;
     const { sources, selectedSource } = this.state;
 
-    const optionalContent = profilesVisible 
-      ? (<li>{t('give you the choice of importing mods into your currently active profile, or create a new import profile in step 4.')}</li>)
+    const optionalContent = profilesVisible
+      ? (
+        <li>
+          {t('give you the choice of importing mods into your currently active profile, or create '
+           + 'a new import profile in step 4.')}
+        </li>)
       : null;
 
     return (
@@ -762,9 +783,11 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         }}
       >
         <div>
-          {t('This is an import tool that allows you to bring your mods over from an existing NMM installation.')} <br/>
-          {t('Please note that the process has a number of limitations, and')} <br/> 
-          {this.getLink(_LINKS.TO_CONSIDER, 'starting with a fresh mod install is therefore recommended.')}
+          {t('This is an import tool that allows you to bring your mods over from an existing '
+          + 'NMM installation.')} <br/>
+          {t('Please note that the process has a number of limitations, and')} <br/>
+          {this.getLink(_LINKS.TO_CONSIDER,
+            'starting with a fresh mod install is therefore recommended.')}
         </div>
         <div>
           <div className='import-will'>
@@ -775,13 +798,14 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
             <li>{t('copy all mods that are currently managed by NMM over to Vortex.')}</li>
 
             <li>
-              {t('preserve your chosen ')} 
-              {this.getLink(_LINKS.FOMOD_LINK, 'scripted installer (FOMOD) ')} 
+              {t('preserve your chosen ')}
+              {this.getLink(_LINKS.FOMOD_LINK, 'scripted installer (FOMOD) ')}
               {t('options for mods installed via NMM.')}
             </li>
 
             <li>{t('reorder your plugin list based on LOOT rules.')}</li>
-            <li>{t('require sufficient disk space as imported mods will be copied (rather than moved).')}</li>
+            <li>{t('require sufficient disk space as imported mods will '
+                 + 'be copied (rather than moved).')}</li>
             {optionalContent}
             <li>{t('leave your existing NMM installation unmodified.')}</li>
           </ul>
@@ -793,13 +817,19 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           </div>
           <ul>
             <li>
-              {t('import any mod files in your data folder that are ')} 
-              {this.getLink(_LINKS.UNMANAGED, 'not managed by NMM. ')}  
-              {t('If you have mods reliant on unmanaged files, those mods might not work as expected in your ')}  
-              {t('Vortex profile.')}</li>
-            <li>{t('import your overwrite decisions. After importing, Vortex will allow you to decide your ') +
-                  t('mod overwrites dynamically, without needing to reinstall mods.')}</li>
-            <li>{t('preserve your plugin load order, as plugins will be rearranged according to LOOT rules.')}</li>
+              {t('import any mod files in your data folder that are ')}
+              {this.getLink(_LINKS.UNMANAGED, 'not managed by NMM. ')}
+              {t('If you have mods reliant on unmanaged files, those mods might not work as ')}
+              {t('expected in your Vortex profile.')}
+            </li>
+            <li>
+              {t('import your overwrite decisions. After importing, Vortex will allow you to ') +
+               t('decide your mod overwrites dynamically, without needing to reinstall mods.')}
+            </li>
+            <li>
+              {t('preserve your plugin load order, '
+               + 'as plugins will be rearranged according to LOOT rules.')}
+            </li>
           </ul>
         </div>
         {sources === undefined
@@ -835,9 +865,13 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           onSelect={this.selectProfile}
           style={{ marginLeft: 15 }}
         >
-          {newProfile === undefined && this.renderProfileElement(t('Create New Profile'), '_create_new_profile_')}
-          {this.renderProfileElement(t('Active Profile: ') + activeProfile.name, '_currently_active_profile_')}
-          {profileList.map(prof => prof.id !== activeProfile.id ? this.renderProfileElement(prof.name, prof.id) : null)}
+          {(newProfile === undefined)
+            && this.renderProfileElement(t('Create New Profile'), '_create_new_profile_')}
+          {this.renderProfileElement(t('Active Profile: ') + activeProfile.name,
+            '_currently_active_profile_')}
+          {profileList.map(prof => (prof.id !== activeProfile.id)
+            ? this.renderProfileElement(prof.name, prof.id)
+            : null)}
         </SplitButton>
       </div>
     );
@@ -845,7 +879,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private renderProfileElement = (option, evKey?): JSX.Element => {
     const key = evKey !== undefined ? evKey : option;
-    return <MenuItem key={key} eventKey={key}>{option}</MenuItem>
+    return <MenuItem key={key} eventKey={key}>{option}</MenuItem>;
   }
 
   private renderNoSources(): JSX.Element {
@@ -934,10 +968,12 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         />
       );
 
-    const importArchivesWarning: JSX.Element =
-      importArchives === false 
-      ? (<p className='import-archives-warning'>{t('You will not be able to re-install these mods!')}</p>)
-      : null
+    const importArchivesWarning: JSX.Element = (importArchives === false)
+      ? (
+        <p className='import-archives-warning'>
+          {t('You will not be able to re-install these mods!')}
+        </p>)
+      : null;
 
     return (
       <div className='import-mods-selection'>
@@ -950,7 +986,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         >
           <a
             className='fake-link'
-            title={t('If toggled, this will import the mod archive (7z, zip, rar) in addition to any imported mod.')}
+            // tskl
+            title={t('If toggled, this will import the mod archive (7z, zip, rar) in addition to '
+            + 'any imported mod.')}
           >
             {t('Import archives')}
           </a>
@@ -970,7 +1008,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     return (
       <div className='import-working-container'>
         <span>
-          <h3>{t('Mods are being copied. This might take a while. Thank you for your patience.')}</h3>
+          <h3>
+            {t('Mods are being copied. This might take a while. Thank you for your patience.')}
+          </h3>
           {t('Currently importing: {{mod}}', {replace: { mod: progress.mod }})}
         </span>
         <ProgressBar now={perc} label={`${perc}%`} />
@@ -985,7 +1025,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       return false;
     }
 
-    const conflicted: IModEntry[] = imported.filter(mod => conflictedMods.find(conf => conf === mod.modName) !== undefined);
+    const conflicted: IModEntry[] =
+      imported.filter(mod => conflictedMods.find(conf => conf === mod.modName) !== undefined);
     return conflicted.length > 0 ? true : false;
   }
 
@@ -998,15 +1039,16 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         <Toggle
             checked={enableModsOnFinish}
             onToggle={this.toggleEnableOnFinish}
+        >
+          <a
+            className='fake-link'
+            title={profilesVisible ? t('Will enable the imported mods for the selected profile')
+                                  : t('Enable imported mods.')}
           >
-            <a
-              className='fake-link'
-              title={profilesVisible ? t('Will enable the imported mods for the selected profile') 
-                                    : t('Enable imported mods.')}
-            >
-              {profilesVisible ? t('If toggled, will enable all imported mods for the selected profile.') 
-                              : t('If toggled, will enable all imported mods.')}
-            </a>
+            {profilesVisible
+              ? t('If toggled, will enable all imported mods for the selected profile.')
+              : t('If toggled, will enable all imported mods.')}
+          </a>
         </Toggle>
       </div>
     ) : null;
@@ -1044,11 +1086,16 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
             <Icon name='conflict' />
             {t('Mod Conflicts:')}
           </div>
-          
-          {t('Vortex has detected unsolved file conflicts. This is not an error and merely implies that you will have to choose which conflicting mods should')} <br/>
-          {t('overwrite one another - similar to how you decide on overwrites when installing mods with NMM:')}<br/><br/>
-          {this.getLink(_LINKS.FILE_CONFLICTS, 'I am getting a lot of mod conflicts with Vortex that were not there in Nexus Mod Manager. What’s wrong? ')}<br/><br/>
-          {t('Unlike NMM, with Vortex you will be able to change your overwrite decisions dynamically without having to reinstall the mods.')} <br/><br/>
+
+          {t('Vortex has detected unsolved file conflicts. This is not an error and merely implies '
+           + 'that you will have to choose which conflicting mods should')} <br/>
+          {t('overwrite one another - similar to how you decide on overwrites when installing mods '
+           + 'with NMM:')}<br/><br/>
+          {this.getLink(_LINKS.FILE_CONFLICTS,
+            'I am getting a lot of mod conflicts with Vortex that were not there in Nexus Mod '
+           + 'Manager. What’s wrong? ')}<br/><br/>
+          {t('Unlike NMM, with Vortex you will be able to change your overwrite decisions '
+           + 'dynamically without having to reinstall the mods.')} <br/><br/>
           {t('You can easily address these file conflicts / overwrites with Vortex\'s ')}
           {this.getLink(_LINKS.MANAGE_CONFLICTS, 'built-in conflict resolution tools.')} <br/>
           {t('You can learn more about how to properly address file conflicts and more in ')}
@@ -1195,24 +1242,27 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const { activeProfile, downloadPath, installPath } = this.props;
     this.nextState.error = undefined;
 
-    this.nextState.selectedProfile = { id: activeProfile.id, profile: activeProfile };;
+    this.nextState.selectedProfile = { id: activeProfile.id, profile: activeProfile };
 
     try {
       modFiles.rootPath = winapi.GetVolumePathName(installPath);
       archiveFiles.rootPath = winapi.GetVolumePathName(downloadPath);
 
       // It is beyond the scope of the disk space calculation logic to check or ensure
-      //  that the installation/download paths exist (this should've been handled before this stage);
+      //  that the installation/download paths exist (this should've been handled before this
+      //  stage);
       //  reason why we're simply going to use the root paths for the calculation.
       //
-      //  This is arguably a band-aid fix for https://github.com/Nexus-Mods/Vortex/issues/2624; 
-      //  but the only reason why these folders would be missing in the first place is if they 
+      //  This is arguably a band-aid fix for https://github.com/Nexus-Mods/Vortex/issues/2624;
+      //  but the only reason why these folders would be missing in the first place is if they
       //  have been removed manually or by an external application WHILE Vortex is running!
       //
       //  The import process will create these directories when mod/archive files are copied over
       //  if they're missing.
-      modFiles.totalFreeBytes = winapi.GetDiskFreeSpaceEx(modFiles.rootPath).free - MIN_DISK_SPACE_OFFSET;
-      archiveFiles.totalFreeBytes = winapi.GetDiskFreeSpaceEx(archiveFiles.rootPath).free - MIN_DISK_SPACE_OFFSET;
+      modFiles.totalFreeBytes =
+        winapi.GetDiskFreeSpaceEx(modFiles.rootPath).free - MIN_DISK_SPACE_OFFSET;
+      archiveFiles.totalFreeBytes =
+        winapi.GetDiskFreeSpaceEx(archiveFiles.rootPath).free - MIN_DISK_SPACE_OFFSET;
     } catch (err) {
       this.context.api.showErrorNotification('Unable to start import process', err, {
         // don't allow report on "not found" and permission errors
@@ -1250,7 +1300,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       .catch(err => {
         this.nextState.error = err.message;
       }).finally(() => {
-        this.onStartUp().catch(err => this.context.api.showErrorNotification('failed to calculate size required',
+        this.onStartUp().catch(err =>
+          this.context.api.showErrorNotification('failed to calculate size required',
           err, { allowReport: (err as any).code !== 'ENOENT' }));
       });
   }
@@ -1302,7 +1353,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
 function mapStateToProps(state: any): IConnectedProps {
   const gameId = selectors.activeGameId(state);
-  const profiles: {[id: string]: types.IProfile} = util.getSafe(state, ['persistent', 'profiles'], undefined);
+  const profiles: {[id: string]: types.IProfile} =
+    util.getSafe(state, ['persistent', 'profiles'], undefined);
 
   // Worried about how the below bit may affect performance...
   const relevantProfiles: {[id: string]: types.IProfile} = {};
