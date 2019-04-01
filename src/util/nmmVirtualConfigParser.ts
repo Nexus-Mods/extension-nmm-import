@@ -41,7 +41,6 @@ function transformFileEntry(
 export function parseModEntries(
     xmlData: string, mods: IModMap,
     virtualInstallPath: string): Promise<IModEntry[]> {
-  const nmmModList: IModEntry[] = [];
   const parser = new DOMParser();
 
   // lookup to determine if a mod is already installed in vortex
@@ -72,7 +71,7 @@ export function parseModEntries(
     const res: IModEntry = {
       nexusId: modInfo.getAttribute('modId'),
       vortexId: undefined,
-      downloadId: parseInt(modInfo.getAttribute('downloadId'), 10),
+      downloadId: parseInt(modInfo.getAttribute('downloadId'), 10) || undefined,
       modName: modInfo.getAttribute('modName'),
       modFilename: modInfo.getAttribute('modFileName'),
       archivePath: modInfo.getAttribute('modFilePath'),
@@ -91,10 +90,16 @@ export function parseModEntries(
     let useOldPath: boolean = false;
 
     // NMM has a crazy workaround where it will use an install path based on
-    // the download id or the archive name, whatever is available
+    // the download id or the archive name, whatever is available.
+    // Manually added mods seem to have neither! attempt to use the mod's name
+    //  as a final resort.
     const adjustRealPath = (input: string): string => {
-      return path.join(useOldPath ? archiveName : res.downloadId.toString(),
-                       ...input.split(path.sep).slice(1));
+      return path.join(useOldPath
+        ? archiveName
+        : (res.downloadId !== undefined)
+          ? res.downloadId.toString()
+          : res.modName,
+        ...input.split(path.sep).slice(1));
     };
 
     return fs.statAsync(path.join(virtualInstallPath, archiveName))
