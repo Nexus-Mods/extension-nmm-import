@@ -150,7 +150,9 @@ function importMods(api: types.IExtensionApi,
         })
           .then(() => {
             trace.log('info', 'Finished transferring unpacked mod files');
-            addMods(gameId, modsEx, api);
+            const installedMods = modsEx.filter(mod => errors.find(error =>
+              error === mod.modName) === undefined);
+            addMods(gameId, installedMods, api);
           }));
     })
     .then(() => {
