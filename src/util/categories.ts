@@ -6,7 +6,7 @@ function parseCategories(data: string): { [id: string]: string } {
 
   const xmlDoc = parser.parseFromString(data, 'text/xml');
 
-  const categories = xmlDoc.querySelectorAll("categoryManager categoryList category");
+  const categories = xmlDoc.querySelectorAll('categoryManager categoryList category');
   const items = [...Array(categories.length).keys()].map(i => categories.item(i));
 
   return items.reduce((prev: { [id: string]: string }, item) => {
@@ -24,4 +24,3 @@ export function getCategories(categoriesPath: string): Promise<{ [id: string]: s
       return parseCategories(data.toString('utf-8'));
     });
 }
-

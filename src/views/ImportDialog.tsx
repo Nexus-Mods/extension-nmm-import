@@ -1329,6 +1329,11 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
     this.mTrace.initDirectory(selectedSource[0])
       .then(() => getCategories(categoriesPath))
+      // Do not stop the import process just because we can't import categories.
+      .catch(err => {
+        this.mTrace.log('error', 'Failed to import categories from NMM', err);
+        return Promise.resolve({});
+      })
       .then(categories => {
         this.mTrace.log('info', 'NMM Mods (count): ' + modList.length +
           ' - Importing (count):' + enabledMods.length);
@@ -1358,7 +1363,7 @@ function mapStateToProps(state: any): IConnectedProps {
 
   // Worried about how the below bit may affect performance...
   const relevantProfiles: {[id: string]: types.IProfile} = {};
-  profiles !== undefined
+  (profiles !== undefined)
     ? Object.keys(profiles)
       .map(id => profiles[id])
       .filter(prof => prof.gameId === gameId)
