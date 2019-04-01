@@ -45,26 +45,26 @@ export function transferUnpackedMod(mod: IModEntry, nmmVirtualPath: string, nmmL
     .then(() => Promise.map(mod.fileEntries,
       file => {
         // We shouldn't include the mod's base directory; remove it from the file's source
-        //  path. We ensure that the mod name is actually inside the realPath attribute 
+        //  path. We ensure that the mod name is actually inside the realPath attribute
         //  first just in case. (Not sure if that's a valid use case in NMM)
         const modNameIndex = file.fileSource.indexOf(mod.modName);
-        const rootFilePath = modNameIndex !== -1 
+        const rootFilePath = (modNameIndex !== -1)
           ? file.fileSource.substring(modNameIndex + mod.modName.length + 1)
           : file.fileSource;
 
-        operation(path.join(nmmVirtualPath, file.fileSource),
-        path.join(destPath, rootFilePath))
+        return operation(path.join(nmmVirtualPath, file.fileSource),
+                         path.join(destPath, rootFilePath))
         .catch(err => {
           if ((err.code === 'ENOENT') && (nmmLinkPath)) {
-            operation(path.join(nmmLinkPath, file.fileSource),
-                      path.join(destPath, rootFilePath))
+            return operation(path.join(nmmLinkPath, file.fileSource),
+                             path.join(destPath, rootFilePath))
               .catch(linkErr => {
                 failedFiles.push(file.fileSource + ' - ' + linkErr.message);
               });
           } else {
             failedFiles.push(file.fileSource + ' - ' + err.message);
           }
-        })
+        });
       }))
     .then(() => Promise.resolve(failedFiles));
 }
