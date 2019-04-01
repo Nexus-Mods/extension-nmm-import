@@ -47,7 +47,7 @@ interface IConnectedProps {
   downloadPath: string;
   installPath: string;
   importStep?: Step;
-  profiles: {[id: string]: types.IProfile}
+  profiles: {[id: string]: types.IProfile};
   activeProfile: types.IProfile;
   profilesVisible: boolean;
 }
@@ -419,16 +419,15 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private onImportChange(mod: IModEntry): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      const { importArchives } = this.nextState;
-      const { modFiles, archiveFiles } = this.nextState.capacityInformation;
-      const calcKey = 'onChange';
-      const getArchiveSize = () => {
-        return importArchives ? this.calculateArchiveSize(mod) : 0;
-      };
+    const { importArchives } = this.nextState;
+    const { modFiles, archiveFiles } = this.nextState.capacityInformation;
+    const calcKey = 'onChange';
+    const getArchiveSize = () => {
+      return importArchives ? this.calculateArchiveSize(mod) : 0;
+    };
 
-      this.nextState.isCalculating[calcKey] = true;
-      Promise.all([this.calculateModFilesSize(mod), getArchiveSize()])
+    this.nextState.isCalculating[calcKey] = true;
+    return Promise.all([this.calculateModFilesSize(mod), getArchiveSize()])
       .then(results => {
         let modified: number[] = results;
         if (!this.nextState.importEnabled[mod.modFilename]) {
@@ -439,9 +438,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         archiveFiles.totalNeededBytes += modified[1];
 
         this.nextState.isCalculating[calcKey] = false;
-        return resolve();
-      }).catch(err => reject(err));
-    });
+        return Promise.resolve();
+    }).catch(err => Promise.reject(err));
   }
 
   private setTotalBytesNeeded(modList: IModEntry[]): Promise<void> {
