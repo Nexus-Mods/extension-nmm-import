@@ -123,15 +123,33 @@ function importMods(api: types.IExtensionApi,
 
   return trace.writeFile('parsedMods.json', JSON.stringify(mods))
     .then(() => {
+      const installedMods: IModEntry[] = [];
       trace.log('info', 'transfer unpacked mods files');
       const installPath = selectors.installPath(state);
       const downloadPath = selectors.downloadPath(state);
       return Promise.map(mods, mod => enhance(modsPath, mod, categories, makeVortexCategory))
         .then(modsEx => Promise.mapSeries(modsEx, (mod, idx) => {
+          let isModInstalled: boolean = true;
           trace.log('info', 'transferring', JSON.stringify(mod, undefined, 2));
           progress(mod.modName, idx);
-          return transferUnpackedMod(mod, sourcePath, alternateSourcePath, installPath, true)
+          return transferUnpackedMod(mod, sourcePath,
+            alternateSourcePath, installPath, true, () => {
+              isModInstalled = false;
+              // Cleanup folder structure which may have created during the transfer.
+              const installedPath = path.join(installPath, mod.vortexId);
+              return fs.removeAsync(installedPath)
+                .catch(err => {
+                  // We're going to leave this mod as installed as we failed to cleanup the
+                  //  directories.
+                  isModInstalled = true;
+                  trace.log('error', 'Failed to cleanup failed mod import directories', err);
+                  return Promise.resolve();
+                });
+            })
             .then(failed => {
+              if (isModInstalled) {
+                installedMods.push(mod);
+              }
               if (failed.length > 0) {
                 trace.log('error', 'Failed to import', failed);
                 errors.push(mod.modName);
@@ -150,9 +168,9 @@ function importMods(api: types.IExtensionApi,
         })
           .then(() => {
             trace.log('info', 'Finished transferring unpacked mod files');
-            const installedMods = modsEx.filter(mod => errors.find(error =>
-              error === mod.modName) === undefined);
-            addMods(gameId, installedMods, api);
+            if (installedMods.length > 0) {
+              addMods(gameId, installedMods, api);
+            }
           }));
     })
     .then(() => {

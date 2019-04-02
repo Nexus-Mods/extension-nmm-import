@@ -25,8 +25,12 @@ function byLength(lhs: string, rhs: string): number {
  * @param {string} installPath
  * @param {boolean} keepSource
  */
-export function transferUnpackedMod(mod: IModEntry, nmmVirtualPath: string, nmmLinkPath: string,
-                                    installPath: string, keepSource: boolean): Promise<string[]> {
+export function transferUnpackedMod(mod: IModEntry,
+                                    nmmVirtualPath: string,
+                                    nmmLinkPath: string,
+                                    installPath: string,
+                                    keepSource: boolean,
+                                    onTransferFailed: () => Promise<void>): Promise<string[]> {
   const operation = keepSource ? fs.copyAsync : fs.renameAsync;
 
   const destPath = path.join(installPath, mod.vortexId);
@@ -41,6 +45,7 @@ export function transferUnpackedMod(mod: IModEntry, nmmVirtualPath: string, nmmL
   });
 
   const failedFiles: string[] = [];
+  let hasTransferredFiles: boolean = false;
   return Promise.map(Array.from(directories).sort(byLength), dir => fs.ensureDirAsync(dir))
     .then(() => Promise.map(mod.fileEntries,
       file => {
@@ -54,10 +59,18 @@ export function transferUnpackedMod(mod: IModEntry, nmmVirtualPath: string, nmmL
 
         return operation(path.join(nmmVirtualPath, file.fileSource),
                          path.join(destPath, rootFilePath))
+        .then(() => {
+          hasTransferredFiles = true;
+          return Promise.resolve();
+        })
         .catch(err => {
           if ((err.code === 'ENOENT') && (nmmLinkPath)) {
             return operation(path.join(nmmLinkPath, file.fileSource),
                              path.join(destPath, rootFilePath))
+              .then(() => {
+                hasTransferredFiles = true;
+                return Promise.resolve();
+              })
               .catch(linkErr => {
                 failedFiles.push(file.fileSource + ' - ' + linkErr.message);
               });
@@ -66,5 +79,7 @@ export function transferUnpackedMod(mod: IModEntry, nmmVirtualPath: string, nmmL
           }
         });
       }))
-    .then(() => Promise.resolve(failedFiles));
+    .then(() => (!hasTransferredFiles)
+      ? onTransferFailed().then(() => Promise.resolve(failedFiles))
+      : Promise.resolve(failedFiles));
 }
