@@ -29,8 +29,7 @@ export function transferUnpackedMod(mod: IModEntry,
                                     nmmVirtualPath: string,
                                     nmmLinkPath: string,
                                     installPath: string,
-                                    keepSource: boolean,
-                                    onTransferFailed: () => Promise<void>): Promise<string[]> {
+                                    keepSource: boolean): Promise<{hasTransferredFiles: boolean, errors: string[]}> {
   const operation = keepSource ? fs.copyAsync : fs.renameAsync;
 
   const destPath = path.join(installPath, mod.vortexId);
@@ -44,7 +43,7 @@ export function transferUnpackedMod(mod: IModEntry,
     directories.add(path.dirname(path.join(destPath, file.fileDestination)));
   });
 
-  const failedFiles: string[] = [];
+  const errors: string[] = [];
   let hasTransferredFiles: boolean = false;
   return Promise.map(Array.from(directories).sort(byLength), dir => fs.ensureDirAsync(dir))
     .then(() => Promise.map(mod.fileEntries,
@@ -59,27 +58,30 @@ export function transferUnpackedMod(mod: IModEntry,
 
         return operation(path.join(nmmVirtualPath, file.fileSource),
                          path.join(destPath, rootFilePath))
-        .then(() => {
+        .tap(() => {
           hasTransferredFiles = true;
-          return Promise.resolve();
         })
         .catch(err => {
           if ((err.code === 'ENOENT') && (nmmLinkPath)) {
             return operation(path.join(nmmLinkPath, file.fileSource),
                              path.join(destPath, rootFilePath))
-              .then(() => {
+              .tap(() => {
                 hasTransferredFiles = true;
-                return Promise.resolve();
               })
               .catch(linkErr => {
-                failedFiles.push(file.fileSource + ' - ' + linkErr.message);
+                errors.push(file.fileSource + ' - ' + linkErr.message);
               });
           } else {
-            failedFiles.push(file.fileSource + ' - ' + err.message);
+            errors.push(file.fileSource + ' - ' + err.message);
           }
         });
       }))
     .then(() => (!hasTransferredFiles)
-      ? onTransferFailed().then(() => Promise.resolve(failedFiles))
-      : Promise.resolve(failedFiles));
+      ? fs.removeAsync(destPath)
+          .catch(err => {
+            errors.push('Failed to clean-up directories for failed mod import'
+                      + ' - ' + err.message);
+            return Promise.resolve();
+          }).then(() => Promise.resolve({hasTransferredFiles, errors}))
+      : Promise.resolve({hasTransferredFiles, errors}));
 }

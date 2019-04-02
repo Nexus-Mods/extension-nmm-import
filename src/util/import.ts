@@ -129,29 +129,15 @@ function importMods(api: types.IExtensionApi,
       const downloadPath = selectors.downloadPath(state);
       return Promise.map(mods, mod => enhance(modsPath, mod, categories, makeVortexCategory))
         .then(modsEx => Promise.mapSeries(modsEx, (mod, idx) => {
-          let isModInstalled: boolean = true;
           trace.log('info', 'transferring', JSON.stringify(mod, undefined, 2));
           progress(mod.modName, idx);
-          return transferUnpackedMod(mod, sourcePath,
-            alternateSourcePath, installPath, true, () => {
-              isModInstalled = false;
-              // Cleanup folder structure which may have created during the transfer.
-              const installedPath = path.join(installPath, mod.vortexId);
-              return fs.removeAsync(installedPath)
-                .catch(err => {
-                  // We're going to leave this mod as installed as we failed to cleanup the
-                  //  directories.
-                  isModInstalled = true;
-                  trace.log('error', 'Failed to cleanup failed mod import directories', err);
-                  return Promise.resolve();
-                });
-            })
-            .then(failed => {
-              if (isModInstalled) {
+          return transferUnpackedMod(mod, sourcePath, alternateSourcePath, installPath, true)
+            .then(transferResult => {
+              if (transferResult.hasTransferredFiles) {
                 installedMods.push(mod);
               }
-              if (failed.length > 0) {
-                trace.log('error', 'Failed to import', failed);
+              if (transferResult.errors.length > 0) {
+                trace.log('error', 'Failed to import', transferResult.errors);
                 errors.push(mod.modName);
               }
               if (transferArchives) {
