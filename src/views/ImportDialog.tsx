@@ -18,7 +18,7 @@ import {
 import * as path from 'path';
 import * as React from 'react';
 import { Alert, Button, MenuItem, ProgressBar, SplitButton } from 'react-bootstrap';
-import { translate } from 'react-i18next';
+import { withTranslation } from 'react-i18next';
 import { connect } from 'react-redux';
 import * as Redux from 'redux';
 import { actions, ComponentEx, fs, Icon, ITableRowAction, Modal,
@@ -1420,6 +1420,6 @@ function mapDispatchToProps(dispatch: Redux.Dispatch<any>): IActionProps {
   };
 }
 
-export default translate([ 'common' ], { wait: false })(
+export default withTranslation([ 'common' ])(
   connect(mapStateToProps, mapDispatchToProps)(
-    ImportDialog)) as React.ComponentClass<{}>;
+    ImportDialog) as any) as React.ComponentClass<{}>;
