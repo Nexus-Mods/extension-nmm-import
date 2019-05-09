@@ -195,6 +195,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           // Avoid calculating for mods that are already managed by Vortex.
           if (!mod.isAlreadyManaged) {
             this.mDebouncer.schedule(err => {
+              if (err instanceof util.UserCanceled) {
+                return;
+              }
               if (err) {
                 this.context.api.showErrorNotification('Failed to validate mod file', err,
                   { allowReport: (err as any).code !== 'ENOENT' });
