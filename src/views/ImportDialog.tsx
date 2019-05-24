@@ -568,7 +568,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       const newId = shortid();
       this.context.api.showDialog('question', t('Create new profile'), {
           input: [{ id: 'profileName', value: '', label: t('Profile Name') }],
-      }, [{label: t('Create Profile')}, {label: t('Cancel')}])
+      }, [{label: t('Cancel')}, {label: t('Create Profile')}])
       .then((result: types.IDialogResult) => {
         if (result.action === t('Create Profile')) {
           const newProf: types.IProfile = {
@@ -620,10 +620,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         options: { wrap: true },
       }, [
         {
-          label: 'Switch Profile', action: () => this.commenceSwitch(selectedProfile.id),
+          label: 'Close',
         },
         {
-          label: 'Close',
+          label: 'Switch Profile', action: () => this.commenceSwitch(selectedProfile.id),
         },
       ]);
     };
@@ -636,14 +636,14 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       noDismiss: true,
       actions: [
         {
-          title: 'Yes',
+          title: 'Switch',
           action: dismiss => {
             openDialog();
             dismiss();
           },
         },
         {
-          title: 'No',
+          title: 'Dismiss',
           action: dismiss => {
             openDialog();
             dismiss();
