@@ -57,6 +57,12 @@ interface ICapacityInfo {
   rootPath: string;
   totalNeededBytes: number;
   totalFreeBytes: number;
+  hasCalculationErrors: boolean;
+}
+
+interface IModCapacityInfo {
+  modSizeBytes: number;
+  archiveSizeBytes: number;
 }
 
 interface IActionProps {
@@ -78,9 +84,8 @@ interface IComponentState {
   progress: { mod: string, pos: number };
   failedImports: string[];
 
-  isCalculating: { [id: string]: boolean };
   capacityInformation: { [id: string]: ICapacityInfo };
-  hasCalculationErrors: boolean;
+  modsCapacity: { [id: string]: IModCapacityInfo };
 
   // Array to hold conflicted mod names.
   conflictedMods: string[];
@@ -103,7 +108,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private mStatus: types.ITableAttribute;
   private mTrace: TraceImport;
-  private mDebouncer: util.Debouncer;
   private actions: ITableRowAction[];
 
   constructor(props: IProps) {
@@ -113,6 +117,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       sources: undefined,
       importArchives: true,
       modsToImport: undefined,
+      modsCapacity: undefined,
       selectedSource: [],
       error: undefined,
       importEnabled: {},
@@ -120,20 +125,20 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       progress: undefined,
       failedImports: [],
 
-      hasCalculationErrors: false,
-      isCalculating: {},
       capacityInformation: {
         modFiles: {
           desc: 'Mod Files',
           rootPath: '',
           totalNeededBytes: 0,
           totalFreeBytes: 0,
+          hasCalculationErrors: false,
         },
         archiveFiles: {
           desc: 'Archive Files',
           rootPath: '',
           totalNeededBytes: 0,
           totalFreeBytes: 0,
+          hasCalculationErrors: false,
         },
       },
 
@@ -158,16 +163,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         singleRowAction: false,
       },
     ];
-
-    this.mDebouncer = new util.Debouncer((mod) => {
-      if (mod === undefined) {
-        return null;
-      }
-      return this.onImportChange(mod).catch(err => {
-        this.nextState.hasCalculationErrors = true;
-        return Promise.reject(err);
-      });
-    }, 100);
 
     this.mStatus = {
       id: 'status',
@@ -194,15 +189,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           ++this.nextState.counter;
           // Avoid calculating for mods that are already managed by Vortex.
           if (!mod.isAlreadyManaged) {
-            this.mDebouncer.schedule(err => {
-              if (err instanceof util.UserCanceled) {
-                return;
-              }
-              if (err) {
-                this.context.api.showErrorNotification('Failed to validate mod file', err,
-                  { allowReport: (err as any).code !== 'ENOENT' });
-              }
-            }, mod);
+            this.recalculate();
           } else {
             return null;
           }
@@ -229,7 +216,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   public render(): JSX.Element {
     const { t, importStep } = this.props;
     const { error, sources, capacityInformation,
-            importArchives, hasCalculationErrors } = this.state;
+            importArchives } = this.state;
 
     const canCancel = ['start', 'setup'].indexOf(importStep) !== -1;
     const nextLabel = ((sources !== undefined) && (sources.length > 0))
@@ -240,6 +227,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       ? this.next()
       : this.finish();
 
+    const hasCalculationErrors = (capacityInformation.modFiles.hasCalculationErrors)
+      || (capacityInformation.archiveFiles.hasCalculationErrors);
+
     let merged: ICapacityInfo;
     if (this.isIdenticalRootPath()) {
       merged = {
@@ -248,6 +238,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         totalFreeBytes: capacityInformation.modFiles.totalFreeBytes,
         totalNeededBytes: capacityInformation.modFiles.totalNeededBytes +
                           capacityInformation.archiveFiles.totalNeededBytes,
+        hasCalculationErrors,
       };
     }
     return (
@@ -288,26 +279,27 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     this.nextState.sources = undefined;
     this.nextState.importArchives = true;
     this.nextState.modsToImport = undefined;
+    this.nextState.modsCapacity = undefined;
     this.nextState.selectedSource = [];
     this.nextState.error = undefined;
     this.nextState.importEnabled = {};
     this.nextState.counter = 0;
     this.nextState.progress = undefined;
     this.nextState.failedImports = [];
-    this.nextState.hasCalculationErrors = false;
-    this.nextState.isCalculating = {};
     this.nextState.capacityInformation = {
       modFiles: {
         desc: 'Mod Files',
         rootPath: '',
         totalNeededBytes: 0,
         totalFreeBytes: 0,
+        hasCalculationErrors: false,
       },
       archiveFiles: {
         desc: 'Archive Files',
         rootPath: '',
         totalNeededBytes: 0,
         totalFreeBytes: 0,
+        hasCalculationErrors: false,
       },
     };
     this.nextState.selectedProfile = undefined;
@@ -334,10 +326,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       this.nextState.importEnabled[key] = enable;
     });
 
-    this.recalculate()
-      .catch(err =>
-        this.context.api.showErrorNotification('Disk space calculation errors.', err,
-        { allowReport: (err as any).code !== 'ENOENT' }));
+    this.recalculate();
   }
 
   private importSelected = (entries) => {
@@ -349,50 +338,11 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private recalculate() {
-    return new Promise<void>((resolve, reject) => {
-      const { modsToImport, importArchives } = this.state;
-      const { modFiles, archiveFiles } = this.nextState.capacityInformation;
-      if (modsToImport === undefined) {
-        // happens if there are no NMM mods for this game
-        return Promise.resolve();
-      }
-
-      const calcKey = 'recalculate';
-
-      const isImportEnabled = (mod: IModEntry): boolean => {
-        return ((this.nextState.importEnabled[mod.modFilename] !== false) &&
-          !((this.nextState.importEnabled[mod.modFilename] === undefined) && mod.isAlreadyManaged));
-      };
-
-      this.nextState.hasCalculationErrors = false;
-      const modList = Object.keys(modsToImport)
-        .map(id => modsToImport[id])
-        .filter(entry => isImportEnabled(entry) && !entry.isAlreadyManaged);
-
-      const getArchiveSize = (mod) => {
-        return importArchives ? this.calculateArchiveSize(mod) : 0;
-      };
-
-      // Reset the required number of bytes properties.
-      modFiles.totalNeededBytes = 0;
-      archiveFiles.totalNeededBytes = 0;
-
-      this.nextState.isCalculating[calcKey] = true;
-      return Promise.map(modList, mod => {
-        return Promise.all([this.calculateModFilesSize(mod),
-          getArchiveSize(mod)]).then(results => {
-            modFiles.totalNeededBytes += results[0];
-            archiveFiles.totalNeededBytes += results[1];
-        });
-      }).then(() => {
-        this.nextState.isCalculating[calcKey] = false;
-        return resolve();
-      }).catch(err => {
-        this.nextState.hasCalculationErrors = true;
-        this.nextState.isCalculating[calcKey] = false;
-        return reject(err);
-      });
-    });
+    const { modFiles, archiveFiles } = this.nextState.capacityInformation;
+    modFiles.hasCalculationErrors = false;
+    archiveFiles.hasCalculationErrors = false;
+    modFiles.totalNeededBytes = this.calcModFiles();
+    archiveFiles.totalNeededBytes = this.calcArchiveFiles();
   }
 
   private getModNumber(): string {
@@ -407,27 +357,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     return `${enabledMods.length} / ${modList.length}`;
   }
 
-  private onToggleArchive(arg: boolean): Promise<void> {
-    const { archiveFiles } = this.nextState.capacityInformation;
-    const calcKey = 'toggleArchive';
-    return new Promise<void>((resolve, reject) => {
-      this.nextState.isCalculating[calcKey] = true;
-      if (arg === false) {
-        archiveFiles.totalNeededBytes = 0;
-        this.nextState.isCalculating[calcKey] = false;
-        return resolve();
-      }
-      this.totalArchiveSize().then(size => {
-        archiveFiles.totalNeededBytes += size;
-        this.nextState.isCalculating[calcKey] = false;
-        return resolve();
-      }).catch(err => {
-        this.nextState.hasCalculationErrors = true;
-        return reject(err);
-      });
-    });
-  }
-
   private onStartUp(): Promise<void> {
     const { modsToImport } = this.state;
     if (modsToImport === undefined) {
@@ -435,68 +364,78 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       return Promise.resolve();
     }
 
-    const calcKey = 'startUp';
-
-    this.nextState.hasCalculationErrors = false;
     const modList = Object.keys(modsToImport)
-      .map(id => modsToImport[id])
-      .filter(entry => this.isModEnabled(entry) && !entry.isAlreadyManaged);
+      .map(id => modsToImport[id]);
 
-    this.nextState.isCalculating[calcKey] = true;
-    return this.setTotalBytesNeeded(modList)
-      .tap(() => {
-      this.nextState.isCalculating[calcKey] = false;
-    }).tapCatch(() => {
-      this.nextState.isCalculating[calcKey] = false;
-      this.nextState.hasCalculationErrors = true;
-    });
+    return this.calculateModsCapacity(modList);
   }
 
-  private onImportChange(mod: IModEntry): Promise<void> {
-    const { importArchives } = this.nextState;
+  private calculateModsCapacity(modList: IModEntry[]): Promise<void> {
     const { modFiles, archiveFiles } = this.nextState.capacityInformation;
-    const calcKey = 'onChange';
-    const getArchiveSize = () => {
-      return importArchives ? this.calculateArchiveSize(mod) : 0;
-    };
-
-    this.nextState.isCalculating[calcKey] = true;
-    return Promise.all([this.calculateModFilesSize(mod), getArchiveSize()])
-      .then(results => {
-        let modified: number[] = results;
-        if (!this.nextState.importEnabled[mod.modFilename]) {
-          modified = results.map(res => res * -1);
-        }
-
-        modFiles.totalNeededBytes += modified[0];
-        archiveFiles.totalNeededBytes += modified[1];
-
-        this.nextState.isCalculating[calcKey] = false;
+    const modCapacityInfo: { [id: string]: IModCapacityInfo } = {};
+    return Promise.mapSeries(modList, mod => this.calculateModFilesSize(mod)
+      .then(modSizeBytes => this.calculateArchiveSize(mod)
+        .then(archiveSizeBytes => {
+          modCapacityInfo[mod.modFilename] = { modSizeBytes, archiveSizeBytes };
+          return Promise.resolve();
+        })
+        .catch(() => {
+          archiveFiles.hasCalculationErrors = true;
+          modCapacityInfo[mod.modFilename] = { modSizeBytes, archiveSizeBytes: undefined };
+          return Promise.resolve();
+      }))
+      .catch(() => {
+        modFiles.hasCalculationErrors = true;
+        modCapacityInfo[mod.modFilename] = { modSizeBytes: undefined, archiveSizeBytes: undefined };
         return Promise.resolve();
+      }))
+    .then(() => {
+      this.nextState.modsCapacity = modCapacityInfo;
+      this.recalculate();
+      return Promise.resolve();
     });
   }
 
-  private setTotalBytesNeeded(modList: IModEntry[]): Promise<void> {
-    const { modFiles, archiveFiles } = this.nextState.capacityInformation;
+  private calcModFiles() {
+    const { modsCapacity, modsToImport } = this.nextState;
+    return ((modsCapacity !== undefined) && (modsToImport !== undefined))
+      ? Object.keys(modsCapacity)
+        .filter(id => this.modWillBeEnabled(modsToImport[id]))
+        .map(id => modsCapacity[id])
+        .reduce((total, mod) => {
+          if (mod.modSizeBytes !== undefined) {
+            return total + mod.modSizeBytes;
+          } else {
+            this.nextState.capacityInformation.modFiles.hasCalculationErrors = true;
+            return total;
+          }
+        }, 0)
+      : 0;
+  }
 
-    // Reset the required number of bytes properties.
-    modFiles.totalNeededBytes = 0;
-    archiveFiles.totalNeededBytes = 0;
-
-    return Promise.map(modList, mod =>
-      Promise.all([this.calculateModFilesSize(mod), this.calculateArchiveSize(mod)])
-        .then(results => {
-          modFiles.totalNeededBytes += results[0];
-          archiveFiles.totalNeededBytes += results[1];
-        }))
-    .then(() => null);
+  private calcArchiveFiles() {
+    const { modsCapacity, modsToImport, importArchives } = this.nextState;
+    return (importArchives
+      && (modsCapacity !== undefined)
+      && (modsToImport !== undefined))
+        ? Object.keys(modsCapacity)
+            .filter(id => this.modWillBeEnabled(modsToImport[id]))
+            .map(id => modsCapacity[id])
+            .reduce((total, mod) => {
+              if (mod.archiveSizeBytes !== undefined) {
+                return total + mod.archiveSizeBytes;
+              } else {
+                this.nextState.capacityInformation.archiveFiles.hasCalculationErrors = true;
+                return total;
+              }
+            }, 0)
+        : 0;
   }
 
   private calculateArchiveSize(mod: IModEntry): Promise<number> {
     return fs.statAsync(path.join(mod.archivePath, mod.modFilename))
-    .then(stats => stats.size)
-    .catch(util.UserCanceled, () => Promise.resolve(0))
-    .catch(err => err.code === 'ENOENT' ? Promise.resolve(0) : Promise.reject(err));
+      .then(stats => stats.size)
+      .catch(util.UserCanceled, () => Promise.resolve(0));
   }
 
   private calculateModFilesSize(mod: IModEntry): Promise<number> {
@@ -655,7 +594,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private getCapacityInfo(instance: ICapacityInfo): JSX.Element {
     const { t } = this.props;
-    const { hasCalculationErrors } = this.state;
     return (
       <div>
           <p className={(instance.totalNeededBytes > instance.totalFreeBytes) || this.testSumBreach() ? 'disk-space-insufficient' : 'disk-space-sufficient'}>
@@ -664,7 +602,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
               replace: {
                 desc: t(instance.desc),
                 rootPath: instance.rootPath,
-                required: hasCalculationErrors ? '???' : util.bytesToString(instance.totalNeededBytes),
+                required: instance.hasCalculationErrors ? '???' : util.bytesToString(instance.totalNeededBytes),
                 available: util.bytesToString(instance.totalFreeBytes),
               },
             })
@@ -672,15 +610,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           </p>
       </div>
     );
-  }
-
-  private isBusyCalculating(): boolean {
-    const { isCalculating } = this.state;
-    const calcList = Object.keys(isCalculating).map(id => isCalculating[id]);
-    if (calcList.find(calc => calc === true) !== undefined) {
-      return true;
-    }
-    return false;
   }
 
   /**
@@ -738,7 +667,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     return (error !== undefined)
         || ((importStep === 'setup') && (modsToImport === undefined))
         || ((importStep === 'setup') && (enabled.length === 0))
-        || ((importStep === 'setup') && (this.isBusyCalculating()))
         || ((importStep === 'setup') && (this.testCapacityInfoBreaches()));
   }
 
@@ -957,28 +885,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private toggleArchiveImport = () => {
-    const { t } = this.props;
     const { importArchives } = this.state;
-    const newVal = !importArchives;
-    this.onToggleArchive(newVal)
-      .catch(err => this.context.api.showErrorNotification(t('Failed to validate archive file'),
-        err, { allowReport: (err as any).code !== 'ENOENT' }));
-    this.nextState.importArchives = newVal;
-  }
-
-  private totalArchiveSize(): Promise<number> {
-    const { modsToImport } = this.state;
-    // No NMM mods for this game.
-    if (modsToImport === undefined) {
-      return Promise.resolve(0);
-    }
-    const modList = Object.keys(modsToImport).map(id =>
-      modsToImport[id]).filter(mod => this.isModEnabled(mod) && !mod.isAlreadyManaged);
-    return Promise.map(modList, mod => {
-      return this.calculateArchiveSize(mod);
-    }).then(results => {
-      return results.reduce((previous, res) => previous + res, 0);
-    });
+    this.nextState.importArchives = !importArchives;
+    this.recalculate();
   }
 
   private renderSelectMods(): JSX.Element {
@@ -1019,7 +928,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         >
           <a
             className='fake-link'
-            // tskl
             title={t('If toggled, this will import the mod archive (7z, zip, rar) in addition to '
             + 'any imported mod.')}
           >
@@ -1321,7 +1229,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const state: types.IState = this.context.api.store.getState();
     const mods = state.persistent.mods[gameId] || {};
 
-    parseNMMConfigFile(virtualPath, mods)
+    return parseNMMConfigFile(virtualPath, mods)
       .then((modEntries: IModEntry[]) => {
         this.nextState.modsToImport = modEntries.reduce((prev, value) => {
           // modfilename appears to be the only field that we can rely on being set and it being
@@ -1332,11 +1240,12 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       })
       .catch(err => {
         this.nextState.error = err.message;
-      }).finally(() => {
-        this.onStartUp().catch(err =>
-          this.context.api.showErrorNotification('failed to calculate required disk space',
-          err, { allowReport: (err as any).code !== 'ENOENT' }));
-      });
+      }).finally(() => this.onStartUp());
+  }
+
+  private modWillBeEnabled(mod: IModEntry): boolean {
+    return ((this.nextState.importEnabled[mod.modFilename] !== false) &&
+          !((this.nextState.importEnabled[mod.modFilename] === undefined) && mod.isAlreadyManaged));
   }
 
   private isModEnabled(mod: IModEntry): boolean {
@@ -1345,7 +1254,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private startImport() {
-    const { gameId, t } = this.props;
+    const { gameId } = this.props;
     const { importArchives, modsToImport, selectedSource } = this.state;
 
     this.mTrace = new TraceImport();
