@@ -359,7 +359,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private onStartUp(): Promise<void> {
     const { modsToImport } = this.state;
-    if (modsToImport === undefined) {
+    if ((modsToImport === undefined) || (Object.keys(modsToImport).length === 0)) {
       // happens if there are no NMM mods for this game
       return Promise.resolve();
     }
