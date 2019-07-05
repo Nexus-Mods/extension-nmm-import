@@ -218,7 +218,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const { error, sources, capacityInformation,
             importArchives } = this.state;
 
-    const canCancel = ['start', 'setup'].indexOf(importStep) !== -1;
+    const canCancel = ((['start', 'setup'].indexOf(importStep) !== -1)
+                   || (error !== undefined));
     const nextLabel = ((sources !== undefined) && (sources.length > 0))
       ? this.nextLabel(importStep)
       : undefined;
