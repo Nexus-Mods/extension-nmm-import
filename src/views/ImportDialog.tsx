@@ -1299,6 +1299,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 }
 
+const emptyObj = {};
 function mapStateToProps(state: any): IConnectedProps {
   const gameId = selectors.activeGameId(state);
   const profiles: {[id: string]: types.IProfile} =
@@ -1311,7 +1312,7 @@ function mapStateToProps(state: any): IConnectedProps {
       .map(id => profiles[id])
       .filter(prof => prof.gameId === gameId)
       .forEach(profile => relevantProfiles[profile.id] = profile)
-    : {};
+    : emptyObj;
 
   return {
     gameId,
