@@ -2,7 +2,7 @@ import { IModEntry } from '../types/nmmEntries';
 
 import * as Promise from 'bluebird';
 import * as path from 'path';
-import { fs } from 'vortex-api';
+import { fs, util } from 'vortex-api';
 
 /**
  * copy or move a list of mod archives
@@ -48,16 +48,41 @@ export function transferUnpackedMod(mod: IModEntry,
   return Promise.map(Array.from(directories).sort(byLength), dir => fs.ensureDirAsync(dir))
     .then(() => Promise.map(mod.fileEntries,
       file => {
-        // We shouldn't include the mod's base directory; remove it from the file's source
-        //  path. We ensure that the mod name is actually inside the realPath attribute
-        //  first just in case. (Not sure if that's a valid use case in NMM)
-        const modNameIndex = file.fileSource.indexOf(mod.modName);
-        const rootFilePath = (modNameIndex !== -1)
-          ? file.fileSource.substring(modNameIndex + mod.modName.length + 1)
-          : file.fileSource;
+        // At this point ideally, file.fileDestination would provide us with a
+        //  relative path; unfortunately we have met cases where fileDestination is
+        //  actually an absolute path so we need to ensure we cater for that as well.
+        //  NOTE: NMM ^0.70.X no longer stores mods using the mod's name but rather
+        //  by the downloadId (inconsistency is king on that side of the river).
+        //
+        // We _could_ attempt to get a relative path between the game's mods folder
+        //  and the file destination we pulled from NMM; but then we don't have the
+        //  guarantee that the user has set Vortex to use the same game installation...
+        //  so we're going to take an ugly shortcut:
+        //  - Check source for modName;
+        //  - if source doesn't contain modName, check for downloadId
+        //  - finally if we failed on all fronts, just let the user know
+        //    that Vortex can't import this mod.
+        let parentFolderName;
+        let modNameIndex;
+        const isDestAbs = path.isAbsolute(file.fileDestination);
+        if (isDestAbs) {
+          parentFolderName = mod.modName;
+          modNameIndex = file.fileSource.indexOf(parentFolderName);
+          if ((modNameIndex === -1) && (!!mod.downloadId)) {
+            parentFolderName = mod.downloadId.toString(); // 0.70 uses downloadIds
+            modNameIndex = file.fileSource.indexOf(parentFolderName);
+          }
+        }
 
-        return operation(path.join(nmmVirtualPath, file.fileSource),
-                         path.join(destPath, rootFilePath))
+        const rootFilePath = (!isDestAbs)
+          ? file.fileDestination
+          : (modNameIndex !== -1)
+            ? file.fileSource.substring(modNameIndex + parentFolderName.length + 1)
+            : undefined;
+
+        return (rootFilePath !== undefined)
+          ? operation(path.join(nmmVirtualPath, file.fileSource), path.join(destPath, rootFilePath))
+          : Promise.reject(new util.DataInvalid('Unable to identify mod\'s root path'))
         .tap(() => {
           hasTransferredFiles = true;
         })
