@@ -82,17 +82,13 @@ export function transferUnpackedMod(mod: IModEntry,
 
         return (rootFilePath !== undefined)
           ? operation(path.join(nmmVirtualPath, file.fileSource), path.join(destPath, rootFilePath))
+              .tap(() => { hasTransferredFiles = true; })
           : Promise.reject(new util.DataInvalid('Unable to identify mod\'s root path'))
-        .tap(() => {
-          hasTransferredFiles = true;
-        })
         .catch(err => {
           if ((err.code === 'ENOENT') && (nmmLinkPath)) {
             return operation(path.join(nmmLinkPath, file.fileSource),
                              path.join(destPath, rootFilePath))
-              .tap(() => {
-                hasTransferredFiles = true;
-              })
+              .tap(() => { hasTransferredFiles = true; })
               .catch(linkErr => {
                 errors.push(file.fileSource + ' - ' + linkErr.message);
               });
