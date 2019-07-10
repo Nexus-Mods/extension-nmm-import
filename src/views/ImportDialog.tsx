@@ -340,10 +340,19 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private recalculate() {
     const { modFiles, archiveFiles } = this.nextState.capacityInformation;
+    const { modsCapacity, modsToImport, importArchives } = this.nextState;
+    const validCalcState = ((modsCapacity !== undefined)
+                         && (modsToImport !== undefined)
+                         && (Object.keys(modsToImport).length > 0));
     modFiles.hasCalculationErrors = false;
     archiveFiles.hasCalculationErrors = false;
-    modFiles.totalNeededBytes = this.calcModFiles();
-    archiveFiles.totalNeededBytes = this.calcArchiveFiles();
+    modFiles.totalNeededBytes = validCalcState
+      ? this.calcModFiles()
+      : 0;
+
+    archiveFiles.totalNeededBytes = (validCalcState && importArchives)
+      ? this.calcArchiveFiles()
+      : 0;
   }
 
   private getModNumber(): string {
@@ -399,38 +408,32 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private calcModFiles() {
     const { modsCapacity, modsToImport } = this.nextState;
-    return ((modsCapacity !== undefined) && (modsToImport !== undefined))
-      ? Object.keys(modsCapacity)
-        .filter(id => this.modWillBeEnabled(modsToImport[id]))
-        .map(id => modsCapacity[id])
-        .reduce((total, mod) => {
-          if (mod.modSizeBytes !== undefined) {
-            return total + mod.modSizeBytes;
-          } else {
-            this.nextState.capacityInformation.modFiles.hasCalculationErrors = true;
-            return total;
-          }
-        }, 0)
-      : 0;
+    return Object.keys(modsCapacity)
+      .filter(id => this.modWillBeEnabled(modsToImport[id]))
+      .map(id => modsCapacity[id])
+      .reduce((total, mod) => {
+        if (mod.modSizeBytes !== undefined) {
+          return total + mod.modSizeBytes;
+        } else {
+          this.nextState.capacityInformation.modFiles.hasCalculationErrors = true;
+          return total;
+        }
+      }, 0);
   }
 
   private calcArchiveFiles() {
-    const { modsCapacity, modsToImport, importArchives } = this.nextState;
-    return (importArchives
-      && (modsCapacity !== undefined)
-      && (modsToImport !== undefined))
-        ? Object.keys(modsCapacity)
-            .filter(id => this.modWillBeEnabled(modsToImport[id]))
-            .map(id => modsCapacity[id])
-            .reduce((total, mod) => {
-              if (mod.archiveSizeBytes !== undefined) {
-                return total + mod.archiveSizeBytes;
-              } else {
-                this.nextState.capacityInformation.archiveFiles.hasCalculationErrors = true;
-                return total;
-              }
-            }, 0)
-        : 0;
+    const { modsCapacity, modsToImport } = this.nextState;
+    return Object.keys(modsCapacity)
+      .filter(id => this.modWillBeEnabled(modsToImport[id]))
+      .map(id => modsCapacity[id])
+      .reduce((total, mod) => {
+        if (mod.archiveSizeBytes !== undefined) {
+          return total + mod.archiveSizeBytes;
+        } else {
+          this.nextState.capacityInformation.archiveFiles.hasCalculationErrors = true;
+          return total;
+        }
+      }, 0);
   }
 
   private calculateArchiveSize(mod: IModEntry): Promise<number> {
