@@ -234,7 +234,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     let merged: ICapacityInfo;
     if (this.isIdenticalRootPath()) {
       merged = {
-        desc: '',
+        desc: 'Mod Files',
         rootPath: capacityInformation.modFiles.rootPath,
         totalFreeBytes: capacityInformation.modFiles.totalFreeBytes,
         totalNeededBytes: capacityInformation.modFiles.totalNeededBytes +
