@@ -74,9 +74,9 @@ export function parseModEntries(
       })
       .then((hashResult: modmeta.IHashResult) => {
         res.archiveMD5 = hashResult.md5sum;
+        return Promise.resolve(res);
       })
-      .then(() => res)
-      .catch(() => undefined);
+      .catch(() => Promise.resolve(undefined));
   });
 }
 
