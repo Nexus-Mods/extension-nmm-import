@@ -11,7 +11,6 @@ export interface IModEntry {
   archiveMD5: string;
   importFlag: boolean;
   isAlreadyManaged: boolean;
-  fileEntries: IFileEntry[];
   archiveId?: string;
   categoryId?: string;
   customName?: string;

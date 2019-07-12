@@ -1,9 +1,9 @@
 import { setImportStep } from '../actions/session';
 
-import { IModEntry } from '../types/nmmEntries';
+import { IModEntry, ParseError } from '../types/nmmEntries';
 import { getCategories } from '../util/categories';
 import findInstances from '../util/findInstances';
-import importMods from '../util/import';
+import importArchives from '../util/import';
 import parseNMMConfigFile from '../util/nmmVirtualConfigParser';
 import { enableModsForProfile } from '../util/vortexImports';
 
@@ -12,7 +12,7 @@ import * as winapi from 'winapi-bindings';
 import TraceImport from '../util/TraceImport';
 
 import {
-  FILENAME, FILES, LOCAL, MOD_ID, MOD_NAME, MOD_VERSION,
+  FILENAME, LOCAL, MOD_ID, MOD_NAME, MOD_VERSION,
 } from '../importedModAttributes';
 
 import * as path from 'path';
@@ -26,6 +26,9 @@ import { actions, ComponentEx, fs, Icon, ITableRowAction, Modal,
 
 import * as Promise from 'bluebird';
 
+import { createHash } from 'crypto';
+import { IMod } from 'vortex-api/lib/types/api';
+
 type Step = 'start' | 'setup' | 'working' | 'review';
 
 // Used to reduce the amount of detected free space by 500MB.
@@ -33,10 +36,19 @@ type Step = 'start' | 'setup' | 'working' | 'review';
 //  with no disk space after the import process is finished.
 const MIN_DISK_SPACE_OFFSET = (500 * (1e+6));
 
+// Set of known/acceptable archive extensions.
+const archiveExtLookup = new Set<string>([
+  '.zip', '.7z', '.rar', '.bz2', '.bzip2', '.gz', '.gzip', '.xz', '.z',
+]);
+
 const _LINKS = {
+// tslint:disable-next-line: max-line-length
   TO_CONSIDER: 'https://wiki.nexusmods.com/index.php/Importing_from_Nexus_Mod_Manager:_Things_to_consider',
+// tslint:disable-next-line: max-line-length
   FOMOD_LINK: 'https://wiki.nexusmods.com/index.php/Importing_from_Nexus_Mod_Manager:_Things_to_consider#Scripted_Installers_.2F_FOMOD_Installers',
+// tslint:disable-next-line: max-line-length
   UNMANAGED: 'https://wiki.nexusmods.com/index.php/Importing_from_Nexus_Mod_Manager:_Things_to_consider#Unmanaged_Files',
+// tslint:disable-next-line: max-line-length
   FILE_CONFLICTS: 'https://wiki.nexusmods.com/index.php/File_Conflicts:_Nexus_Mod_Manager_vs_Vortex',
   MANAGE_CONFLICTS: 'https://wiki.nexusmods.com/index.php/Managing_File_Conflicts',
   DOCUMENTATION: 'https://wiki.nexusmods.com/index.php/Category:Vortex',
@@ -60,11 +72,6 @@ interface ICapacityInfo {
   hasCalculationErrors: boolean;
 }
 
-interface IModCapacityInfo {
-  modSizeBytes: number;
-  archiveSizeBytes: number;
-}
-
 interface IActionProps {
   onSetStep: (newState: Step) => void;
   onCreateProfile: (newProfile: types.IProfile) => void;
@@ -73,22 +80,24 @@ interface IActionProps {
 type IProps = IConnectedProps & IActionProps;
 
 interface IComponentState {
+  busy: boolean;
   sources: string[][];
   selectedSource: string[];
   selectedProfile: { id: string, profile: types.IProfile };
-  importArchives: boolean;
   modsToImport: { [id: string]: IModEntry };
+  parsedMods: { [id: string]: IModEntry };
   error: string;
   importEnabled: { [id: string]: boolean };
   counter: number;
   progress: { mod: string, pos: number };
   failedImports: string[];
 
-  capacityInformation: { [id: string]: ICapacityInfo };
-  modsCapacity: { [id: string]: IModCapacityInfo };
+  // Dictates whether we can start the import process.
+  canImport: boolean;
 
-  // Array to hold conflicted mod names.
-  conflictedMods: string[];
+  // Disk space calculation variables.
+  capacityInformation: ICapacityInfo;
+  modsCapacity: { [id: string]: number };
 
   // Array of successfully imported mod entries.
   successfullyImported: IModEntry[];
@@ -114,38 +123,30 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     super(props);
 
     this.initState({
+      busy: false,
       sources: undefined,
-      importArchives: true,
       modsToImport: undefined,
-      modsCapacity: undefined,
+      parsedMods: undefined,
       selectedSource: [],
       error: undefined,
       importEnabled: {},
+      modsCapacity: {},
       counter: 0,
       progress: undefined,
       failedImports: [],
+      canImport: false,
 
       capacityInformation: {
-        modFiles: {
-          desc: 'Mod Files',
-          rootPath: '',
-          totalNeededBytes: 0,
-          totalFreeBytes: 0,
-          hasCalculationErrors: false,
-        },
-        archiveFiles: {
-          desc: 'Archive Files',
-          rootPath: '',
-          totalNeededBytes: 0,
-          totalFreeBytes: 0,
-          hasCalculationErrors: false,
-        },
+        desc: 'Archive Files',
+        rootPath: '',
+        totalNeededBytes: 0,
+        totalFreeBytes: 0,
+        hasCalculationErrors: false,
       },
 
       selectedProfile: undefined,
       enableModsOnFinish: true,
       newProfile: undefined,
-      conflictedMods: [],
       successfullyImported: [],
     });
 
@@ -215,8 +216,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   public render(): JSX.Element {
     const { t, importStep } = this.props;
-    const { error, sources, capacityInformation,
-            importArchives } = this.state;
+    const { error, sources, capacityInformation, canImport } = this.state;
 
     const canCancel = ((['start', 'setup'].indexOf(importStep) !== -1)
                    || (error !== undefined));
@@ -224,24 +224,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       ? this.nextLabel(importStep)
       : undefined;
 
-    const onClick = () => importStep !== 'review'
-      ? this.next()
-      : this.finish();
+    const onClick = () => (importStep !== 'review')
+      ? this.next() : this.finish();
 
-    const hasCalculationErrors = (capacityInformation.modFiles.hasCalculationErrors)
-      || (capacityInformation.archiveFiles.hasCalculationErrors);
-
-    let merged: ICapacityInfo;
-    if (this.isIdenticalRootPath()) {
-      merged = {
-        desc: 'Mod Files',
-        rootPath: capacityInformation.modFiles.rootPath,
-        totalFreeBytes: capacityInformation.modFiles.totalFreeBytes,
-        totalNeededBytes: capacityInformation.modFiles.totalNeededBytes +
-                          capacityInformation.archiveFiles.totalNeededBytes,
-        hasCalculationErrors,
-      };
-    }
     return (
       <Modal id='import-dialog' show={importStep !== undefined} onHide={this.nop}>
         <Modal.Header>
@@ -249,18 +234,15 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           {this.renderCurrentStep()}
         </Modal.Header>
         <Modal.Body style={{ height: '60vh', display: 'flex', flexDirection: 'column' }}>
-          {error !== undefined ? <Alert bsStyle='danger'>{error}</Alert> : this.renderContent(importStep)}
+          {
+            error !== undefined
+              ? <Alert bsStyle='danger'>{error}</Alert>
+              : this.renderContent(importStep)
+          }
         </Modal.Body>
         <Modal.Footer>
-          {importStep === 'setup'
-            && (merged !== undefined
-              ? this.getCapacityInfo(merged)
-              : this.getCapacityInfo(capacityInformation.modFiles))}
-          {importStep === 'setup'
-            && importArchives
-            && !this.isIdenticalRootPath()
-            && this.getCapacityInfo(capacityInformation.archiveFiles)}
-          {(importStep === 'setup') && hasCalculationErrors ? (
+          {importStep === 'setup' && this.getCapacityInfo(capacityInformation)}
+          {importStep === 'setup' && capacityInformation.hasCalculationErrors ? (
             <Alert bsStyle='danger'>
               {t('Vortex cannot validate NMM\'s mod/archive files - this usually occurs when '
                 + 'the NMM configuration is corrupt')}
@@ -278,9 +260,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   // Reset all previously set data.
   private resetStateData() {
     this.nextState.sources = undefined;
-    this.nextState.importArchives = true;
     this.nextState.modsToImport = undefined;
-    this.nextState.modsCapacity = undefined;
+    this.nextState.parsedMods = undefined;
     this.nextState.selectedSource = [];
     this.nextState.error = undefined;
     this.nextState.importEnabled = {};
@@ -288,25 +269,15 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     this.nextState.progress = undefined;
     this.nextState.failedImports = [];
     this.nextState.capacityInformation = {
-      modFiles: {
-        desc: 'Mod Files',
-        rootPath: '',
-        totalNeededBytes: 0,
-        totalFreeBytes: 0,
-        hasCalculationErrors: false,
-      },
-      archiveFiles: {
         desc: 'Archive Files',
         rootPath: '',
         totalNeededBytes: 0,
         totalFreeBytes: 0,
         hasCalculationErrors: false,
-      },
     };
     this.nextState.selectedProfile = undefined;
     this.nextState.enableModsOnFinish = true;
     this.nextState.newProfile = undefined;
-    this.nextState.conflictedMods = [];
     this.nextState.successfullyImported = [];
   }
 
@@ -339,18 +310,11 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private recalculate() {
-    const { modFiles, archiveFiles } = this.nextState.capacityInformation;
-    const { modsCapacity, modsToImport, importArchives } = this.nextState;
-    const validCalcState = ((modsCapacity !== undefined)
-                         && (modsToImport !== undefined)
+    const { capacityInformation, modsToImport } = this.nextState;
+    const validCalcState = ((modsToImport !== undefined)
                          && (Object.keys(modsToImport).length > 0));
-    modFiles.hasCalculationErrors = false;
-    archiveFiles.hasCalculationErrors = false;
-    modFiles.totalNeededBytes = validCalcState
-      ? this.calcModFiles()
-      : 0;
-
-    archiveFiles.totalNeededBytes = (validCalcState && importArchives)
+    capacityInformation.hasCalculationErrors = false;
+    capacityInformation.totalNeededBytes = validCalcState
       ? this.calcArchiveFiles()
       : 0;
   }
@@ -368,35 +332,32 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private onStartUp(): Promise<void> {
-    const { modsToImport } = this.nextState;
-    if ((modsToImport === undefined) || (Object.keys(modsToImport).length === 0)) {
+    const { parsedMods } = this.nextState;
+    if (parsedMods === undefined) {
       // happens if there are no NMM mods for this game
       return Promise.resolve();
     }
 
-    const modList = Object.keys(modsToImport)
-      .map(id => modsToImport[id]);
+    return this.populateModsTable().then(mods => {
+      this.nextState.modsToImport = mods;
+      const modList = Object.keys(mods)
+      .map(id => mods[id]);
 
-    return this.calculateModsCapacity(modList);
+      return this.calculateModsCapacity(modList);
+    });
   }
 
   private calculateModsCapacity(modList: IModEntry[]): Promise<void> {
-    const { modFiles, archiveFiles } = this.nextState.capacityInformation;
-    const modCapacityInfo: { [id: string]: IModCapacityInfo } = {};
-    return Promise.mapSeries(modList, mod => this.calculateModFilesSize(mod)
-      .then(modSizeBytes => this.calculateArchiveSize(mod)
-        .then(archiveSizeBytes => {
-          modCapacityInfo[mod.modFilename] = { modSizeBytes, archiveSizeBytes };
-          return Promise.resolve();
-        })
-        .catch(() => {
-          archiveFiles.hasCalculationErrors = true;
-          modCapacityInfo[mod.modFilename] = { modSizeBytes, archiveSizeBytes: undefined };
-          return Promise.resolve();
-      }))
+    const { capacityInformation } = this.nextState;
+    const modCapacityInfo: { [id: string]: number } = {};
+    return Promise.mapSeries(modList, mod => this.calculateArchiveSize(mod)
+      .then(archiveSizeBytes => {
+        modCapacityInfo[mod.modFilename] = archiveSizeBytes;
+        return Promise.resolve();
+      })
       .catch(() => {
-        modFiles.hasCalculationErrors = true;
-        modCapacityInfo[mod.modFilename] = { modSizeBytes: undefined, archiveSizeBytes: undefined };
+        capacityInformation.hasCalculationErrors = true;
+        modCapacityInfo[mod.modFilename] = 0;
         return Promise.resolve();
       }))
     .then(() => {
@@ -406,66 +367,18 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     });
   }
 
-  private calcModFiles() {
-    const { modsCapacity, modsToImport } = this.nextState;
-    return Object.keys(modsCapacity)
-      .filter(id => this.modWillBeEnabled(modsToImport[id]))
-      .map(id => modsCapacity[id])
-      .reduce((total, mod) => {
-        if (mod.modSizeBytes !== undefined) {
-          return total + mod.modSizeBytes;
-        } else {
-          this.nextState.capacityInformation.modFiles.hasCalculationErrors = true;
-          return total;
-        }
-      }, 0);
-  }
-
   private calcArchiveFiles() {
     const { modsCapacity, modsToImport } = this.nextState;
     return Object.keys(modsCapacity)
       .filter(id => this.modWillBeEnabled(modsToImport[id]))
       .map(id => modsCapacity[id])
-      .reduce((total, mod) => {
-        if (mod.archiveSizeBytes !== undefined) {
-          return total + mod.archiveSizeBytes;
-        } else {
-          this.nextState.capacityInformation.archiveFiles.hasCalculationErrors = true;
-          return total;
-        }
-      }, 0);
+      .reduce((total, archiveBytes) => total + archiveBytes, 0);
   }
 
   private calculateArchiveSize(mod: IModEntry): Promise<number> {
     return fs.statAsync(path.join(mod.archivePath, mod.modFilename))
       .then(stats => stats.size)
       .catch(util.UserCanceled, () => Promise.resolve(0));
-  }
-
-  private calculateModFilesSize(mod: IModEntry): Promise<number> {
-    const { selectedSource, conflictedMods } = this.state;
-    return Promise.map(mod.fileEntries, file => {
-
-      // Given that we're reading through the file entries, this
-      //  is a good point to check whether the NMM installation had
-      //  any file conflicts.
-      //
-      // It's important to note that this logic will not execute when/if the
-      //  user decides to import a mod which is already managed by Vortex
-      //  but that is arguably acceptable given that the user may already have
-      //  rules set up for that mod.
-      if (!file.isActive && conflictedMods.find(conf => conf === mod.modName) === undefined) {
-        // The file is inactive - it's safe to assume that the NMM
-        //  installation had some conflicts.
-        this.nextState.conflictedMods.push(mod.modName);
-      }
-
-      const filePath = path.join(selectedSource[0], 'VirtualInstall', file.fileSource);
-      return fs.statAsync(filePath);
-    }).then(stats => {
-      const sum = stats.reduce((previous, stat) => previous + stat.size, 0);
-      return Promise.resolve(sum);
-    });
   }
 
   private commenceSwitch(profileId: string) {
@@ -600,69 +513,30 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const { t } = this.props;
     return (
       <div>
-          <p className={(instance.totalNeededBytes > instance.totalFreeBytes) || this.testSumBreach() ? 'disk-space-insufficient' : 'disk-space-sufficient'}>
+          <p
+            className={(instance.totalNeededBytes > instance.totalFreeBytes)
+              ? 'disk-space-insufficient'
+              : 'disk-space-sufficient'}
+          >
             {
             t('{{desc}}: {{rootPath}} - Size required: {{required}} / {{available}}', {
               replace: {
                 desc: t(instance.desc),
                 rootPath: instance.rootPath,
-                required: instance.hasCalculationErrors ? '???' : util.bytesToString(instance.totalNeededBytes),
+                required: instance.hasCalculationErrors
+                  ? '???'
+                  : util.bytesToString(instance.totalNeededBytes),
                 available: util.bytesToString(instance.totalFreeBytes),
               },
-            })
-            }
+            })}
           </p>
       </div>
     );
   }
 
-  /**
-   * Runs all necessary capacity information checks for disabling the import button.
-   *  Checks will include:
-   *  - Ensure that all ICapacityInformation objects do not surpass the number
-   *    of free bytes available on their target partition.
-   *
-   *  - Compare root paths between archive files and mod files.
-   *    If both entries are installed on the same partition, we need to ensure
-   *    that there's enough space for both to install on that drive.
-   *
-   * @returns True if a "breach" is confirmed and we want the import button to be disabled.
-   *          False if it's safe for the user to click the import button.
-   */
-  private testCapacityInfoBreaches(): boolean {
-    const { capacityInformation } = this.state;
-    const capList = Object.keys(capacityInformation).map(id => capacityInformation[id]);
-
-    if (capList.find(cap => cap.totalNeededBytes > cap.totalFreeBytes) !== undefined) {
-      return true;
-    }
-
-    if (this.testSumBreach()) {
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * @returns True if modFiles and archiveFiles are on the same disk drive AND
-   *  the sum of both capacityInfo objects surpasses the amount of free space.
-   *
-   * ....Naming stuff is hard....
-   */
-  private testSumBreach(): boolean {
-    const { archiveFiles, modFiles } = this.state.capacityInformation;
-    if (modFiles.rootPath === archiveFiles.rootPath) {
-      if ((modFiles.totalNeededBytes + archiveFiles.totalNeededBytes) > modFiles.totalFreeBytes) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   private isNextDisabled = () => {
     const { importStep } = this.props;
-    const { error, modsToImport } = this.state;
+    const { canImport, error, modsToImport, capacityInformation } = this.state;
 
     const enabled = (modsToImport !== undefined)
       ? Object.keys(modsToImport).filter(id => this.isModEnabled(modsToImport[id]))
@@ -671,7 +545,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     return (error !== undefined)
         || ((importStep === 'setup') && (modsToImport === undefined))
         || ((importStep === 'setup') && (enabled.length === 0))
-        || ((importStep === 'setup') && (this.testCapacityInfoBreaches()));
+        || ((importStep === 'setup') && (capacityInformation.totalNeededBytes > capacityInformation.totalFreeBytes)
+        || ((importStep === 'setup') && (!canImport)));
   }
 
   private renderCurrentStep(): JSX.Element {
@@ -719,9 +594,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private renderContent(state: Step): JSX.Element {
+    const { canImport } = this.state;
     switch (state) {
       case 'start': return this.renderStart();
-      case 'setup': return this.renderSelectMods();
+      case 'setup': return (canImport) ? this.renderSelectMods() : this.renderValidation();
       case 'working': return this.renderWorking();
       case 'review': return this.renderReview();
       default: return null;
@@ -888,15 +764,38 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     this.nextState.enableModsOnFinish = !enableModsOnFinish;
   }
 
-  private toggleArchiveImport = () => {
-    const { importArchives } = this.state;
-    this.nextState.importArchives = !importArchives;
-    this.recalculate();
+  private renderValidation(): JSX.Element {
+    const { t } = this.props;
+    const { busy } = this.state;
+    const content = (
+      <div className='is-not-valid'>
+        <h1>Warning!</h1>
+        <span>
+        {t('In order for the import process to function correctly, your mods folder must not ')}
+        {t('contain any mods managed by NMM.')}<br/><br/>
+        {t('Vortex has detected mods installed via NMM. Please minimise Vortex, switch to NMM ')}
+        {t('and disable all mods currently installed via NMM.')}<br/><br/>
+        {t('You cannot proceed with the import process without completing this step.')}<br/><br/>
+        {t('')}
+        </span>
+        <div className='revalidate-area'>
+          <Button
+            className='revalidate-button'
+            onClick={this.validate}
+          >
+            {busy ? <Icon name='spinner' /> : <Icon name='refresh' />}
+          </Button>
+          {t('Check again')}
+        </div>
+      </div>
+    );
+
+    return content;
   }
 
   private renderSelectMods(): JSX.Element {
     const { t } = this.props;
-    const { counter, importArchives, modsToImport } = this.state;
+    const { counter, modsToImport } = this.state;
 
     const content = (modsToImport === undefined)
       ? (
@@ -910,35 +809,14 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           dataId={counter}
           actions={this.actions}
           staticElements={[
-            this.mStatus, MOD_ID, MOD_NAME, MOD_VERSION, FILENAME, FILES, LOCAL]}
+            this.mStatus, MOD_ID, MOD_NAME, MOD_VERSION, FILENAME, LOCAL]}
         />
       );
-
-    const importArchivesWarning: JSX.Element = (importArchives === false)
-      ? (
-        <p className='import-archives-warning'>
-          {t('You will not be able to re-install these mods!')}
-        </p>)
-      : null;
 
     return (
       <div className='import-mods-selection'>
         {content}
         <h3>{t(`Importing: ${this.getModNumber()} mods`)}</h3>
-        <Toggle
-          checked={importArchives}
-          onToggle={this.toggleArchiveImport}
-          style={{ marginTop: 10 }}
-        >
-          <a
-            className='fake-link'
-            title={t('If toggled, this will import the mod archive (7z, zip, rar) in addition to '
-            + 'any imported mod.')}
-          >
-            {t('Import archives')}
-          </a>
-        </Toggle>
-        {importArchivesWarning}
       </div>
     );
   }
@@ -961,18 +839,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         <ProgressBar now={perc} label={`${perc}%`} />
       </div>
     );
-  }
-
-  private hasConflicts(): boolean {
-    const { conflictedMods } = this.state;
-    const imported: IModEntry[] = this.getSuccessfullyImported();
-    if (conflictedMods.length === 0 || imported === undefined || imported.length === 0) {
-      return false;
-    }
-
-    const conflicted: IModEntry[] =
-      imported.filter(mod => conflictedMods.find(conf => conf === mod.modName) !== undefined);
-    return conflicted.length > 0 ? true : false;
   }
 
   private renderEnableModsOnFinishToggle(): JSX.Element {
@@ -1020,36 +886,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     ) : null;
   }
 
-  private renderConflicts() {
-    const { t } = this.props;
-    const hasConflicts: boolean = this.hasConflicts();
-
-    return (
-      hasConflicts ? (
-        <div>
-          <div className='import-conflict-title'>
-            <Icon name='conflict' />
-            {t('Mod Conflicts:')}
-          </div>
-
-          {t('Vortex has detected unsolved file conflicts. This is not an error and merely implies '
-           + 'that you will have to choose which conflicting mods should')} <br/>
-          {t('overwrite one another - similar to how you decide on overwrites when installing mods '
-           + 'with NMM:')}<br/><br/>
-          {this.getLink(_LINKS.FILE_CONFLICTS,
-            'I am getting a lot of mod conflicts with Vortex that were not there in Nexus Mod '
-           + 'Manager. What’s wrong? ')}<br/><br/>
-          {t('Unlike NMM, with Vortex you will be able to change your overwrite decisions '
-           + 'dynamically without having to reinstall the mods.')} <br/><br/>
-          {t('You can easily address these file conflicts / overwrites with Vortex\'s ')}
-          {this.getLink(_LINKS.MANAGE_CONFLICTS, 'built-in conflict resolution tools.')} <br/>
-          {t('You can learn more about how to properly address file conflicts and more in ')}
-          {this.getLink(_LINKS.DOCUMENTATION, 'our documentation.')}
-        </div>
-      ) : null
-    );
-  }
-
   private renderReview(): JSX.Element {
     const { t } = this.props;
     const { failedImports } = this.state;
@@ -1075,8 +911,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         <span>
         {this.renderReviewSummary()}
         <br/><br/>
-        {this.renderConflicts()}
-        <br/><br/>
         </span>
       </div>
     );
@@ -1090,7 +924,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   private nextLabel(step: Step): string {
     const {t} = this.props;
     switch (step) {
-      case 'start': return t('Setup');
+      case 'start': return t('Next');
       case 'setup': return t('Start Import');
       case 'working': return null;
       case 'review': return t('Finish');
@@ -1137,7 +971,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private finish() {
     const { activeProfile, gameId } = this.props;
-    const { selectedProfile, enableModsOnFinish, conflictedMods } = this.state;
+    const { selectedProfile, enableModsOnFinish } = this.state;
 
     // We're only interested in the mods we actually managed to import.
     const imported = this.getSuccessfullyImported();
@@ -1163,35 +997,21 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       //  he needs to deploy the newly added mods.
       if (activeProfile.id !== selectedProfile.id) {
         this.notifySwitchProfile();
-      } else {
-        // Only deploy if we have no conflicts
-        if (conflictedMods.length === 0) {
-          this.context.api.store.dispatch(actions.setDeploymentNecessary(gameId, true));
-        }
       }
     }
 
     this.next();
   }
 
-  private isIdenticalRootPath(): boolean {
-    const { modFiles, archiveFiles } = this.state.capacityInformation;
-    if (modFiles.rootPath === archiveFiles.rootPath) {
-      return true;
-    }
-    return false;
-  }
-
   private start() {
-    const { modFiles, archiveFiles } = this.nextState.capacityInformation;
-    const { activeProfile, downloadPath, installPath } = this.props;
+    const { capacityInformation } = this.nextState;
+    const { activeProfile, downloadPath } = this.props;
     this.nextState.error = undefined;
 
     this.nextState.selectedProfile = { id: activeProfile.id, profile: activeProfile };
 
     try {
-      modFiles.rootPath = winapi.GetVolumePathName(installPath);
-      archiveFiles.rootPath = winapi.GetVolumePathName(downloadPath);
+      capacityInformation.rootPath = winapi.GetVolumePathName(downloadPath);
 
       // It is beyond the scope of the disk space calculation logic to check or ensure
       //  that the installation/download paths exist (this should've been handled before this
@@ -1204,10 +1024,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       //
       //  The import process will create these directories when mod/archive files are copied over
       //  if they're missing.
-      modFiles.totalFreeBytes =
-        winapi.GetDiskFreeSpaceEx(modFiles.rootPath).free - MIN_DISK_SPACE_OFFSET;
-      archiveFiles.totalFreeBytes =
-        winapi.GetDiskFreeSpaceEx(archiveFiles.rootPath).free - MIN_DISK_SPACE_OFFSET;
+      capacityInformation.totalFreeBytes =
+        winapi.GetDiskFreeSpaceEx(capacityInformation.rootPath).free - MIN_DISK_SPACE_OFFSET;
     } catch (err) {
       this.context.api.showErrorNotification('Unable to start import process', err, {
         // don't allow report on "not found" and permission errors
@@ -1216,7 +1034,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       this.cancel();
     }
 
-    findInstances(this.props.gameId)
+    return findInstances(this.props.gameId)
       .then(found => {
         this.nextState.sources = found;
         this.nextState.selectedSource = found[0];
@@ -1228,14 +1046,16 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private setup() {
     const { gameId } = this.props;
+    this.validate();
     const virtualPath =
       path.join(this.state.selectedSource[0], 'VirtualInstall', 'VirtualModConfig.xml');
     const state: types.IState = this.context.api.store.getState();
     const mods = state.persistent.mods[gameId] || {};
 
     return parseNMMConfigFile(virtualPath, mods)
+      .catch(ParseError, () => Promise.resolve([]))
       .then((modEntries: IModEntry[]) => {
-        this.nextState.modsToImport = modEntries.reduce((prev, value) => {
+        this.nextState.parsedMods = modEntries.reduce((prev, value) => {
           // modfilename appears to be the only field that we can rely on being set and it being
           // unique
           prev[value.modFilename] = value;
@@ -1245,6 +1065,157 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       .catch(err => {
         this.nextState.error = err.message;
       }).finally(() => this.onStartUp());
+  }
+
+  private isManifestEmpty(): Promise<boolean> {
+    const { gameId } = this.props;
+    const { selectedSource } = this.state;
+    const virtualPath = path.join(selectedSource[0], 'VirtualInstall', 'VirtualModConfig.xml');
+    const state: types.IState = this.context.api.store.getState();
+    const mods = state.persistent.mods[gameId] || {};
+    return parseNMMConfigFile(virtualPath, mods)
+      .catch(ParseError, () => Promise.resolve(true))
+      .then((modEntries: IModEntry[]) => (modEntries.length > 0)
+        ? Promise.resolve(false)
+        : Promise.resolve(true));
+  }
+
+  private populateModsTable(): Promise<{[id: string]: IModEntry}> {
+    const { selectedSource, parsedMods } = this.state;
+    const mods: {[id: string]: IModEntry} = {...parsedMods};
+    return this.getDisabledArchives()
+      .then(archives => Promise.map(archives, archive => {
+        return this.createModEntry(selectedSource[0], archive)
+          .then(mod => {
+            mods[mod.modFilename] = mod;
+            return Promise.resolve();
+          });
+      }).then(() => mods));
+  }
+
+  private fileChecksum(filePath: string): Promise<string> {
+    const stackErr = new Error();
+    return new Promise<string>((resolve, reject) => {
+      try {
+        const hash = createHash('md5');
+        const stream = fs.createReadStream(filePath);
+        stream.on('data', (data) => {
+          hash.update(data);
+        });
+        stream.on('end', () => {
+          stream.close();
+          stream.destroy();
+          return resolve(hash.digest('hex'));
+        });
+        stream.on('error', (err) => {
+          err.stack = stackErr.stack;
+          reject(err);
+        });
+      } catch (err) {
+        err.stack = stackErr.stack;
+        reject(err);
+      }
+    });
+  }
+
+  private createModEntry(sourcePath: string, input: string): Promise<IModEntry> {
+  // Attempt to query cache/meta information from NMM and return a mod entry
+  //  to use in the import process.
+  const getInner = (ele: Element): string => {
+    if ((ele !== undefined) && (ele !== null)) {
+      const node = ele.childNodes[0];
+      if (node !== undefined) {
+        return node.nodeValue;
+      }
+    }
+    return undefined;
+  };
+
+  const id = path.basename(input, path.extname(input));
+  const cacheBasePath = path.resolve(sourcePath, 'cache', id);
+  return fs.readFileAsync(path.join(cacheBasePath, 'cacheInfo.txt'))
+    .then(data => {
+      const fields = data.toString().split('@@');
+      return fs.readFileAsync(path.join(cacheBasePath,
+        (fields[1] === '-') ? '' : fields[1], 'fomod', 'info.xml'));
+    })
+    .then(infoXmlData => {
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(infoXmlData.toString(), 'text/xml');
+      const modName = getInner(xmlDoc.querySelector('Name')) || id;
+      const version = getInner(xmlDoc.querySelector('Version')) || '';
+      const modId = getInner(xmlDoc.querySelector('Id')) || '';
+      const downloadId = () => {
+        try {
+          return Number.parseInt(getInner(xmlDoc.querySelector('DownloadId')), 10);
+        } catch (err) {
+          return 0;
+        }
+      };
+
+      return this.fileChecksum(path.join(sourcePath, input))
+        .then(md5 => {
+          const modEntry: IModEntry = {
+            nexusId: modId,
+            vortexId: '',
+            downloadId: downloadId(),
+            modName,
+            modFilename: input,
+            archivePath: sourcePath,
+            modVersion: version,
+            archiveMD5: md5,
+            importFlag: true,
+            isAlreadyManaged: false,
+          };
+          return Promise.resolve(modEntry);
+        });
+    })
+    .catch(err => {
+      return this.fileChecksum(path.join(sourcePath, input))
+        .then(md5 => {
+          return Promise.resolve({
+            nexusId: '',
+            vortexId: '',
+            downloadId: 0,
+            modName: path.basename(input, path.extname(input)),
+            modFilename: input,
+            archivePath: sourcePath,
+            modVersion: '',
+            archiveMD5: md5,
+            importFlag: true,
+            isAlreadyManaged: false,
+          });
+        });
+    });
+}
+
+  private getDisabledArchives() {
+    const { selectedSource, parsedMods } = this.state;
+    const knownArchiveExt = (filePath: string): boolean => (!!filePath)
+      ? archiveExtLookup.has(path.extname(filePath).toLowerCase())
+      : false;
+
+    const empty: string[] = [];
+
+    const modFileNames = new Set<string>(Object.keys(parsedMods)
+      .map(key => parsedMods[key].modFilename));
+
+    return fs.readdirAsync(selectedSource[0])
+      .filter(filePath => knownArchiveExt(filePath))
+      .then(archives => archives.filter(archive => !modFileNames.has(archive)))
+      .catch(err => {
+        this.nextState.error = err.message;
+        return empty;
+      });
+  }
+
+  private validate = () => {
+    this.nextState.busy = true;
+    return this.isManifestEmpty()
+      .then(res => {
+        this.nextState.canImport = res;
+        this.nextState.busy = false;
+      });
   }
 
   private modWillBeEnabled(mod: IModEntry): boolean {
@@ -1259,7 +1230,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private startImport() {
     const { gameId } = this.props;
-    const { importArchives, modsToImport, selectedSource } = this.state;
+    const { modsToImport, selectedSource } = this.state;
 
     this.mTrace = new TraceImport();
 
@@ -1269,14 +1240,13 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const nmmLinkPath = (selectedSource[1]) ? path.join(selectedSource[1], gameId, 'NMMLink') : '';
     const modsPath = selectedSource[2];
 
+    this.mTrace.initDirectory(selectedSource[0]);
     // The categories.xml file seems to be created by NMM inside its defined "modFolder"
     //  and not inside the virtual folder.
     const categoriesPath = path.join(modsPath, 'categories', 'Categories.xml');
-
-    this.mTrace.initDirectory(selectedSource[0])
-      .then(() => getCategories(categoriesPath))
-      // Do not stop the import process just because we can't import categories.
+    return getCategories(categoriesPath)
       .catch(err => {
+        // Do not stop the import process just because we can't import categories.
         this.mTrace.log('error', 'Failed to import categories from NMM', err);
         return Promise.resolve({});
       })
@@ -1284,9 +1254,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         this.mTrace.log('info', 'NMM Mods (count): ' + modList.length +
           ' - Importing (count):' + enabledMods.length);
         this.context.api.events.emit('enable-download-watch', false);
-        return importMods(this.context.api, this.mTrace,
+        return importArchives(this.context.api, this.mTrace,
           virtualInstallPath, nmmLinkPath, modsPath, enabledMods,
-          importArchives, categories, (mod: string, pos: number) => {
+          categories, (mod: string, pos: number) => {
             this.nextState.progress = { mod, pos };
           })
           .then(errors => {
@@ -1294,11 +1264,11 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
             this.nextState.failedImports = errors;
             this.props.onSetStep('review');
           });
-      })
-      .catch(err => {
-        this.context.api.events.emit('enable-download-watch', true);
-        this.nextState.error = err.message;
-      });
+        })
+        .catch(err => {
+          this.context.api.events.emit('enable-download-watch', true);
+          this.nextState.error = err.message;
+        });
   }
 }
 

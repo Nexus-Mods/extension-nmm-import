@@ -1,10 +1,9 @@
 import { IFileEntry, IModEntry, ParseError } from '../types/nmmEntries';
 
 import * as Promise from 'bluebird';
-import * as modmetaT from 'modmeta-db';
+import * as modmeta from 'modmeta-db';
 import * as path from 'path';
 import { fs, log, types, util } from 'vortex-api';
-import * as modmeta from 'modmeta-db';
 
 interface IModMap {
   [modId: string]: types.IMod;
@@ -77,7 +76,6 @@ export function parseModEntries(
       archivePath: modInfo.getAttribute('modFilePath'),
       modVersion: modInfo.getAttribute('FileVersion'),
       importFlag: true,
-      fileEntries: [],
       archiveMD5: null,
       isAlreadyManaged: false,
     };
@@ -114,18 +112,18 @@ export function parseModEntries(
                 { archiveName, error: err.message });
           }
 
-          if ((fileLinks !== undefined) && (fileLinks.length > 0)) {
-            res.fileEntries =
-                Array.from(fileLinks)
-                    .map(fileLink => transformFileEntry(fileLink, adjustRealPath))
-                    .filter(entry => entry !== undefined);
-          }
+          // if ((fileLinks !== undefined) && (fileLinks.length > 0)) {
+          //   res.fileEntries =
+          //       Array.from(fileLinks)
+          //           .map(fileLink => transformFileEntry(fileLink, adjustRealPath))
+          //           .filter(entry => entry !== undefined);
+          // }
 
           const modFilePath = path.join(res.archivePath, res.modFilename);
 
           return modmeta.genHash(modFilePath);
         })
-        .then((hashResult: modmetaT.IHashResult) => {
+        .then((hashResult: modmeta.IHashResult) => {
           res.archiveMD5 = hashResult.md5sum;
         })
         .catch(() => { res.archiveMD5 = null; })

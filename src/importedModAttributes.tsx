@@ -64,22 +64,6 @@ export const FILENAME: types.ITableAttribute = {
   edit: {},
 };
 
-export const FILES: types.ITableAttribute = {
-  id: 'files',
-  name: 'Mod Files',
-  description: 'The number of files installed by this mod',
-  icon: 'level-up',
-  calc: (mod: IModEntry) => mod.fileEntries.length,
-  placement: 'detail',
-  isToggleable: true,
-  isSortable: true,
-  filter: new TableNumericFilter(),
-  sortFunc: (lhs: number, rhs: number): number => {
-    return (rhs - lhs);
-  },
-  edit: {},
-};
-
 export const LOCAL: types.ITableAttribute<IModEntry> = {
   id: 'local',
   name: 'Duplicate',
