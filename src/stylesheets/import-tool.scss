@@ -4,6 +4,33 @@
   }
 }
 
+.revalidate-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.is-not-valid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  justify-content: space-evenly;
+  padding: 5px 5px;
+}
+
+.revalidate-button {
+  display: flex;
+  width: 4em;
+  height: 4em;
+  justify-content: center;
+  align-items: center;
+  svg {
+    width: 3em;
+    height: 3em;
+  }
+}
+
 .table-mods-to-import.cell-local {
   text-align: center;
 }
