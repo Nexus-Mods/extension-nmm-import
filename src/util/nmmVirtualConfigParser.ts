@@ -11,11 +11,10 @@ interface IModMap {
 
 export function parseNMMConfigFile(nmmFilePath: string, mods: IModMap): Promise<IModEntry[]> {
   return fs.readFileAsync(nmmFilePath)
-      .catch(
-          err => Promise.reject(new ParseError(
-              'The selected folder does not contain a VirtualModConfig.xml file.')))
-      .then(data => parseModEntries(data.toString('utf-8'), mods, path.dirname(nmmFilePath))
-        .filter(entry => entry !== undefined));
+    .then(data => parseModEntries(data.toString('utf-8'), mods, path.dirname(nmmFilePath))
+      .then(modEntries => modEntries.filter(entry => entry !== undefined)))
+    .catch(err => Promise.reject(new ParseError(
+            'The selected folder does not contain a VirtualModConfig.xml file.')));
 }
 
 // exported so it can be unit-tested (ugh)
