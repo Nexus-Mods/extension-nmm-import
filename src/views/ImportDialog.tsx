@@ -1201,7 +1201,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   private validate = () => {
     const { selectedSource } = this.state;
     this.nextState.busy = true;
-    return isConfigEmpty(path.join(selectedSource[0], 'VirtualInstall', 'VirtualModConfig.xml'))
+    isConfigEmpty(path.join(selectedSource[0], 'VirtualInstall', 'VirtualModConfig.xml'))
       .then(res => {
         this.nextState.canImport = res;
         this.nextState.busy = false;
@@ -1226,8 +1226,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
     const modList = Object.keys(modsToImport).map(id => modsToImport[id]);
     const enabledMods = modList.filter(mod => this.isModEnabled(mod));
-    const virtualInstallPath = path.join(selectedSource[0], 'VirtualInstall');
-    const nmmLinkPath = (selectedSource[1]) ? path.join(selectedSource[1], gameId, 'NMMLink') : '';
     const modsPath = selectedSource[2];
 
     this.mTrace.initDirectory(selectedSource[0]);
@@ -1244,8 +1242,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         this.mTrace.log('info', 'NMM Mods (count): ' + modList.length +
           ' - Importing (count):' + enabledMods.length);
         this.context.api.events.emit('enable-download-watch', false);
-        return importArchives(this.context.api, this.mTrace,
-          virtualInstallPath, nmmLinkPath, modsPath, enabledMods,
+        return importArchives(this.context.api, gameId, this.mTrace, modsPath, enabledMods,
           categories, (mod: string, pos: number) => {
             this.nextState.progress = { mod, pos };
           })
