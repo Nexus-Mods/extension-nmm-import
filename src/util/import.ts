@@ -57,18 +57,14 @@ function enhance(sourcePath: string, input: IModEntry,
 }
 
 function importMods(api: types.IExtensionApi,
+                    gameId: string,
                     trace: TraceImport,
-                    sourcePath: string,
-                    alternateSourcePath: string,
                     modsPath: string,
                     mods: IModEntry[],
                     categories: { [id: string]: string },
                     progress: (mod: string, idx: number) => void): Promise<string[]> {
   const store = api.store;
   const state: types.IState = store.getState();
-
-  const gameId = selectors.activeGameId(state);
-
   const vortexCategories = state.persistent.categories[gameId];
 
   const makeVortexCategory = (name: string): string => {
