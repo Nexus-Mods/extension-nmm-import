@@ -66,11 +66,9 @@ export function parseModEntries(
     res.vortexId = util.deriveInstallName(archiveName, {});
     res.isAlreadyManaged = modListSet.has(res.vortexId);
 
-    return fs.statAsync(path.join(res.archivePath, res.modFilename))
-      .then(() => {
-        const modFilePath = path.join(res.archivePath, res.modFilename);
-        return modmeta.genHash(modFilePath);
-      })
+    const modArchiveFilePath = path.join(res.archivePath, res.modFilename);
+    return fs.statAsync(modArchiveFilePath)
+      .then(() => modmeta.genHash(modArchiveFilePath))
       .then((hashResult: modmeta.IHashResult) => {
         res.archiveMD5 = hashResult.md5sum;
         return Promise.resolve(res);
