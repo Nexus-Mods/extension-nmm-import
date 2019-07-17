@@ -11,16 +11,14 @@ interface IModMap {
 
 export function parseNMMConfigFile(nmmFilePath: string, mods: IModMap): Promise<IModEntry[]> {
   return fs.readFileAsync(nmmFilePath)
-    .then(data => parseModEntries(data.toString('utf-8'), mods, path.dirname(nmmFilePath))
+    .then(data => parseModEntries(data.toString('utf-8'), mods)
       .then(modEntries => modEntries.filter(entry => entry !== undefined)))
     .catch(err => Promise.reject(new ParseError(
             'The selected folder does not contain a VirtualModConfig.xml file.')));
 }
 
 // exported so it can be unit-tested (ugh)
-export function parseModEntries(
-    xmlData: string, mods: IModMap,
-    virtualInstallPath: string): Promise<IModEntry[]> {
+export function parseModEntries(xmlData: string, mods: IModMap): Promise<IModEntry[]> {
   const parser = new DOMParser();
 
   // lookup to determine if a mod is already installed in vortex
