@@ -5,7 +5,7 @@ import { getCategories } from '../util/categories';
 import findInstances from '../util/findInstances';
 import importArchives from '../util/import';
 import parseNMMConfigFile, { isConfigEmpty } from '../util/nmmVirtualConfigParser';
-import { enableModsForProfile } from '../util/vortexImports';
+import { installModsForProfile } from '../util/vortexImports';
 
 import { generate as shortid } from 'shortid';
 import * as winapi from 'winapi-bindings';
@@ -101,9 +101,10 @@ interface IComponentState {
   // Array of successfully imported mod entries.
   successfullyImported: IModEntry[];
 
-  // Dictates whether mods will be automatically
-  //  enabled at the end of the import process.
-  enableModsOnFinish: boolean;
+  // Dictates whether the installation process
+  //  should be kicked off immediately after the user
+  //  has closed the review page.
+  installModsOnFinish: boolean;
 
   // We don't want to allow users to create infinite amount
   //  of new profiles from within the import process, this
@@ -144,7 +145,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       },
 
       selectedProfile: undefined,
-      enableModsOnFinish: true,
+      installModsOnFinish: false,
       newProfile: undefined,
       successfullyImported: [],
     });
@@ -275,7 +276,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         hasCalculationErrors: false,
     };
     this.nextState.selectedProfile = undefined;
-    this.nextState.enableModsOnFinish = true;
+    this.nextState.installModsOnFinish = false;
     this.nextState.newProfile = undefined;
     this.nextState.successfullyImported = [];
   }
@@ -337,19 +338,26 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       return Promise.resolve();
     }
 
-    return this.populateModsTable().then(mods => {
+    return this.populateModsTable((mod: string) => {
+      this.nextState.progress = { mod, pos: 0 };
+    }).then(mods => {
       this.nextState.modsToImport = mods;
       const modList = Object.keys(mods)
       .map(id => mods[id]);
 
-      return this.calculateModsCapacity(modList);
+      return this.calculateModsCapacity(modList, (mod: string) => {
+        this.nextState.progress = { mod, pos: 0 };
+      });
     });
   }
 
-  private calculateModsCapacity(modList: IModEntry[]): Promise<void> {
+  private calculateModsCapacity(modList: IModEntry[],
+                                progress: (mod: string) => void): Promise<void> {
     const { capacityInformation } = this.nextState;
     const modCapacityInfo: { [id: string]: number } = {};
-    return Promise.mapSeries(modList, mod => this.calculateArchiveSize(mod)
+    return Promise.mapSeries(modList, (mod, idx) => {
+      progress(mod.modFilename);
+      return this.calculateArchiveSize(mod)
       .then(archiveSizeBytes => {
         modCapacityInfo[mod.modFilename] = archiveSizeBytes;
         return Promise.resolve();
@@ -358,7 +366,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         capacityInformation.hasCalculationErrors = true;
         modCapacityInfo[mod.modFilename] = 0;
         return Promise.resolve();
-      }))
+      });
+    })
     .then(() => {
       this.nextState.modsCapacity = modCapacityInfo;
       this.recalculate();
@@ -761,9 +770,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     return <MenuItem key={option} eventKey={option}>{option[0]}</MenuItem>;
   }
 
-  private toggleEnableOnFinish = () => {
-    const { enableModsOnFinish } = this.state;
-    this.nextState.enableModsOnFinish = !enableModsOnFinish;
+  private toggleInstallOnFinish = () => {
+    const { installModsOnFinish } = this.state;
+    this.nextState.installModsOnFinish = !installModsOnFinish;
   }
 
   private renderValidation(): JSX.Element {
@@ -798,12 +807,24 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private renderSelectMods(): JSX.Element {
     const { t } = this.props;
-    const { counter, modsToImport } = this.state;
+    const { counter, modsToImport, progress } = this.state;
+
+    const calcProgress = (!!progress)
+      ? (
+        <span>
+          <h3>
+            {t('Calculating required disk space. Thank you for your patience.')}
+          </h3>
+          {t('Currently calculating for: {{mod}}', {replace: { mod: progress.mod }})}
+        </span>
+        )
+      : null;
 
     const content = (modsToImport === undefined)
       ? (
         <div className='spinner-container'>
             <Icon name='spinner' />
+            {calcProgress}
         </div>
       ) : (
         <Table
@@ -846,22 +867,22 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private renderEnableModsOnFinishToggle(): JSX.Element {
     const { t, profilesVisible } = this.props;
-    const { successfullyImported, enableModsOnFinish } = this.state;
+    const { successfullyImported, installModsOnFinish } = this.state;
 
     return successfullyImported.length > 0 ? (
       <div>
         <Toggle
-            checked={enableModsOnFinish}
-            onToggle={this.toggleEnableOnFinish}
+            checked={installModsOnFinish}
+            onToggle={this.toggleInstallOnFinish}
         >
           <a
             className='fake-link'
-            title={profilesVisible ? t('Will enable the imported mods for the selected profile')
-                                  : t('Enable imported mods.')}
+            title={profilesVisible ? t('Will install the imported mods for the selected profile')
+                                  : t('Install imported mods.')}
           >
             {profilesVisible
-              ? t('If toggled, will enable all imported mods for the selected profile.')
-              : t('If toggled, will enable all imported mods.')}
+              ? t('If toggled, will install all imported mods for the selected profile.')
+              : t('If toggled, will install all imported mods.')}
           </a>
         </Toggle>
       </div>
@@ -880,9 +901,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
     return successfullyImported.length > 0 ? (
       <div>
-        {t('Your selected mods have been imported successfully. You can decide now ')}
-        {t('whether you would like to enable all imported mods,')} <br/>
-        {t('or whether you want your imported mods to remain disabled for now.')}<br/><br/>
+        {t('Your selected mod archives have been imported successfully. You can decide now ')}
+        {t('whether you would like to start the installation for all imported mods,')} <br/>
+        {t('or whether you want to install these yourself at a later time.')}<br/><br/>
         {showProfiles}
         {this.renderEnableModsOnFinishToggle()}
     </div>
@@ -974,7 +995,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private finish() {
     const { activeProfile, gameId } = this.props;
-    const { selectedProfile, enableModsOnFinish } = this.state;
+    const { selectedProfile, installModsOnFinish } = this.state;
 
     // We're only interested in the mods we actually managed to import.
     const imported = this.getSuccessfullyImported();
@@ -989,11 +1010,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const store = this.context.api.store;
     const state = store.getState();
 
-    // Check whether the user wants Vortex to automatically enable the mods
-    //  he imported from NMM, and if so, enable the mods for the selected
-    //  profile.
-    if (enableModsOnFinish) {
-      enableModsForProfile(gameId, selectedProfile.id, state, imported, store.dispatch);
+    // Check whether the user wants Vortex to automatically install all imported
+    //  mod archives to the selected profile.
+    if (installModsOnFinish) {
+      installModsForProfile(gameId, selectedProfile.id, state, imported, store.dispatch);
 
       // Check whether the active profile is different from the selected profile.
       //  If so, raise the switch profile notification; otherwise notify the user that
@@ -1070,13 +1090,14 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       }).finally(() => this.onStartUp());
   }
 
-  private populateModsTable(): Promise<{[id: string]: IModEntry}> {
+  private populateModsTable(progress: (mod: string) => void): Promise<{[id: string]: IModEntry}> {
     const { selectedSource, parsedMods } = this.state;
     const mods: {[id: string]: IModEntry} = {...parsedMods};
     return this.getArchives()
       .then(archives => Promise.map(archives, archive => {
         return this.createModEntry(selectedSource[0], archive)
           .then(mod => {
+            progress(mod.modFilename);
             mods[mod.modFilename] = mod;
             return Promise.resolve();
           });

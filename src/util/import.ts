@@ -92,7 +92,10 @@ function importMods(api: types.IExtensionApi,
 
   const errors: string[] = [];
 
-  const transferArchiveFile = (source: string, dest: string, mod: IModEntry, size: number): Promise<void> => {
+  const transferArchiveFile = (source: string,
+                               dest: string,
+                               mod: IModEntry,
+                               size: number): Promise<void> => {
     return transferArchive(source, dest).then(() => {
       const downloads = util.getSafe(state, ['persistent', 'downloads', 'files'], undefined);
       if (downloads === undefined) {
