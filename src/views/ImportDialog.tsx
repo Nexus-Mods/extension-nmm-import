@@ -4,7 +4,7 @@ import { IModEntry, ParseError } from '../types/nmmEntries';
 import { getCategories } from '../util/categories';
 import findInstances from '../util/findInstances';
 import importArchives from '../util/import';
-import parseNMMConfigFile from '../util/nmmVirtualConfigParser';
+import parseNMMConfigFile, { isConfigEmpty } from '../util/nmmVirtualConfigParser';
 import { enableModsForProfile } from '../util/vortexImports';
 
 import { generate as shortid } from 'shortid';
@@ -27,7 +27,6 @@ import { actions, ComponentEx, fs, Icon, ITableRowAction, Modal,
 import * as Promise from 'bluebird';
 
 import { createHash } from 'crypto';
-import { IMod } from 'vortex-api/lib/types/api';
 
 type Step = 'start' | 'setup' | 'working' | 'review';
 
@@ -542,11 +541,14 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       ? Object.keys(modsToImport).filter(id => this.isModEnabled(modsToImport[id]))
       : [];
 
+    // We don't want to fill up the user's harddrive.
+    const totalFree = capacityInformation.totalFreeBytes - MIN_DISK_SPACE_OFFSET;
+    const hasSpace = capacityInformation.totalNeededBytes > totalFree;
     return (error !== undefined)
         || ((importStep === 'setup') && (modsToImport === undefined))
         || ((importStep === 'setup') && (enabled.length === 0))
-        || ((importStep === 'setup') && (capacityInformation.totalNeededBytes > capacityInformation.totalFreeBytes)
-        || ((importStep === 'setup') && (!canImport)));
+        || ((importStep === 'setup') && (hasSpace))
+        || ((importStep === 'setup') && (!canImport));
   }
 
   private renderCurrentStep(): JSX.Element {
@@ -782,6 +784,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           <Button
             className='revalidate-button'
             onClick={this.validate}
+            disabled={busy}
           >
             {busy ? <Icon name='spinner' /> : <Icon name='refresh' />}
           </Button>
@@ -1067,23 +1070,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       }).finally(() => this.onStartUp());
   }
 
-  private isManifestEmpty(): Promise<boolean> {
-    const { gameId } = this.props;
-    const { selectedSource } = this.state;
-    const virtualPath = path.join(selectedSource[0], 'VirtualInstall', 'VirtualModConfig.xml');
-    const state: types.IState = this.context.api.store.getState();
-    const mods = state.persistent.mods[gameId] || {};
-    return parseNMMConfigFile(virtualPath, mods)
-      .catch(ParseError, () => Promise.resolve(true))
-      .then((modEntries: IModEntry[]) => (modEntries.length > 0)
-        ? Promise.resolve(false)
-        : Promise.resolve(true));
-  }
-
   private populateModsTable(): Promise<{[id: string]: IModEntry}> {
     const { selectedSource, parsedMods } = this.state;
     const mods: {[id: string]: IModEntry} = {...parsedMods};
-    return this.getDisabledArchives()
+    return this.getArchives()
       .then(archives => Promise.map(archives, archive => {
         return this.createModEntry(selectedSource[0], archive)
           .then(mod => {
@@ -1189,14 +1179,13 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     });
 }
 
-  private getDisabledArchives() {
+  private getArchives() {
     const { selectedSource, parsedMods } = this.state;
     const knownArchiveExt = (filePath: string): boolean => (!!filePath)
       ? archiveExtLookup.has(path.extname(filePath).toLowerCase())
       : false;
 
-    const empty: string[] = [];
-
+    // Set of mod files which we already have meta information on.
     const modFileNames = new Set<string>(Object.keys(parsedMods)
       .map(key => parsedMods[key].modFilename));
 
@@ -1205,13 +1194,14 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       .then(archives => archives.filter(archive => !modFileNames.has(archive)))
       .catch(err => {
         this.nextState.error = err.message;
-        return empty;
+        return [];
       });
   }
 
   private validate = () => {
+    const { selectedSource } = this.state;
     this.nextState.busy = true;
-    return this.isManifestEmpty()
+    return isConfigEmpty(path.join(selectedSource[0], 'VirtualInstall', 'VirtualModConfig.xml'))
       .then(res => {
         this.nextState.canImport = res;
         this.nextState.busy = false;
