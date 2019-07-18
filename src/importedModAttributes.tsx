@@ -73,7 +73,7 @@ export const LOCAL: types.ITableAttribute<IModEntry> = {
     return mod.isAlreadyManaged ? (
       <tooltip.Icon
         id={`import-duplicate-${mod.nexusId}`}
-        tooltip={t('This mod is already managed by Vortex')}
+        tooltip={t('This archive is already managed by Vortex')}
         name='feedback-warning'
       />
    ) : null;

@@ -1095,9 +1095,17 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   private populateModsTable(progress: (mod: string) => void): Promise<{[id: string]: IModEntry}> {
     const { selectedSource, parsedMods } = this.state;
     const mods: {[id: string]: IModEntry} = {...parsedMods};
+    const state = this.context.api.store.getState();
+    let existingDownloads: Set<string>;
+    const downloads = util.getSafe(state, ['persistent', 'downloads', 'files'], undefined);
+    if ((downloads !== undefined) && (Object.keys(downloads).length > 0)) {
+      existingDownloads = new Set<string>(
+        Object.keys(downloads).map(key => downloads[key].localPath));
+    }
+
     return this.getArchives()
       .then(archives => Promise.map(archives, archive => {
-        return this.createModEntry(selectedSource[0], archive)
+        return this.createModEntry(selectedSource[0], archive, existingDownloads)
           .then(mod => {
             progress(mod.modFilename);
             mods[mod.modFilename] = mod;
@@ -1131,7 +1139,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     });
   }
 
-  private createModEntry(sourcePath: string, input: string): Promise<IModEntry> {
+  private createModEntry(sourcePath: string,
+                         input: string,
+                         existingDownloads: Set<string>): Promise<IModEntry> {
   // Attempt to query cache/meta information from NMM and return a mod entry
   //  to use in the import process.
   const getInner = (ele: Element): string => {
@@ -1142,6 +1152,12 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       }
     }
     return undefined;
+  };
+
+  const isDuplicate = () => {
+    return (existingDownloads !== undefined)
+      ? existingDownloads.has(input)
+      : false;
   };
 
   const id = path.basename(input, path.extname(input));
@@ -1178,7 +1194,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
             modVersion: version,
             archiveMD5: md5,
             importFlag: true,
-            isAlreadyManaged: false,
+            isAlreadyManaged: isDuplicate(),
           };
           return Promise.resolve(modEntry);
         });
@@ -1196,7 +1212,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
             modVersion: '',
             archiveMD5: md5,
             importFlag: true,
-            isAlreadyManaged: false,
+            isAlreadyManaged: isDuplicate(),
           });
         });
     });
