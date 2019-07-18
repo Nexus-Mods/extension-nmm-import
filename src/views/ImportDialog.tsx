@@ -322,7 +322,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   private getModNumber(): string {
     const { modsToImport } = this.state;
     if (modsToImport === undefined) {
-      return '';
+      return undefined;
     }
 
     const modList = Object.keys(modsToImport).map(id => modsToImport[id]);
@@ -822,7 +822,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
     const content = (modsToImport === undefined)
       ? (
-        <div className='spinner-container'>
+        <div className='status-container'>
             <Icon name='spinner' />
             {calcProgress}
         </div>
@@ -836,11 +836,13 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
             this.mStatus, MOD_ID, MOD_NAME, MOD_VERSION, FILENAME, LOCAL]}
         />
       );
-
+    const modNumberText = this.getModNumber();
     return (
       <div className='import-mods-selection'>
         {content}
-        <h3>{t(`Importing: ${this.getModNumber()} mods`)}</h3>
+        {(modNumberText !== undefined)
+          ? (<h3>{t(`Importing: ${this.getModNumber()} mods`)}</h3>)
+          : null}
       </div>
     );
   }

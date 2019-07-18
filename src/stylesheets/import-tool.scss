@@ -19,6 +19,18 @@
   padding: 5px 5px;
 }
 
+.status-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  justify-content: center;
+  align-items: center;
+  svg {
+    width: 5em;
+    height: 5em;
+  }
+}
+
 .revalidate-button {
   display: flex;
   width: 4em;
@@ -48,17 +60,6 @@
   border: 0px;
   border-left: 1px solid $gray-light;
   min-width: 0px;
-}
-
-.spinner-container {
-  flex: 1 1 0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  svg {
-    width: 5em;
-    height: 5em;
-  }
 }
 
 .import-mods-selection {

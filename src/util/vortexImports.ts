@@ -2,11 +2,16 @@ import { IModEntry } from '../types/nmmEntries';
 
 import * as Promise from 'bluebird';
 import * as Redux from 'redux';
-import { actions, types, util } from 'vortex-api';
+import { actions, types } from 'vortex-api';
 
 export function addMetaData(gameID: string, modEntries: IModEntry[],
                             api: types.IExtensionApi) {
   Promise.map(modEntries, modEntry => {
+    if (!!modEntry.categoryId) {
+      api.store.dispatch(
+        actions.setDownloadModInfo(modEntry.archiveId, 'custom.category', modEntry.categoryId));
+    }
+
     if (modEntry.nexusId) {
       api.store.dispatch(
         actions.setDownloadModInfo(modEntry.archiveId, 'source', 'nexus'));
