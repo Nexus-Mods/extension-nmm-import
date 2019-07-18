@@ -12,7 +12,7 @@ export function addMetaData(gameID: string, modEntries: IModEntry[],
         actions.setDownloadModInfo(modEntry.archiveId, 'custom.category', modEntry.categoryId));
     }
 
-    if (modEntry.nexusId) {
+    if (!!modEntry.nexusId) {
       api.store.dispatch(
         actions.setDownloadModInfo(modEntry.archiveId, 'source', 'nexus'));
       api.store.dispatch(
