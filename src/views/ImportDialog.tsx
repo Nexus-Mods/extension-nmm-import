@@ -5,7 +5,6 @@ import { getCategories } from '../util/categories';
 import findInstances from '../util/findInstances';
 import importArchives from '../util/import';
 import parseNMMConfigFile, { isConfigEmpty } from '../util/nmmVirtualConfigParser';
-import { installModsForProfile } from '../util/vortexImports';
 
 import { generate as shortid } from 'shortid';
 import * as winapi from 'winapi-bindings';
@@ -449,71 +448,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           return resolve(activeProfile);
         }
       });
-    });
-  }
-
-  private getProfileText(profile: types.IProfile): string {
-    return profile.name + '/' + profile.id;
-  }
-
-  private notifySwitchProfile() {
-    const { t, activeProfile } = this.props;
-    const {selectedProfile} = this.state;
-
-    const openDialog = () => {
-      this.context.api.showDialog('info', 'Switch Profile', {
-        bbcode: t('The currently active profile is: "{{active}}"; you chose to enable ' +
-                  'the imported mods for a different profile named: "{{selected}}", ' +
-                  'would you like to switch to this profile now? - installer (FOMOD) ' +
-                  'settings will be preserved<br /><br />' +
-                  'Choosing \"Switch Profile\" will switch over to the import profile. ' +
-                  'Choosing "Close" will keep your currently active profile. <br /><br />' +
-                  'Please note when switching: although mods will be enabled by default, ' +
-                  'plugins require you to enable them [b]MANUALLY![/b] please enable your ' +
-                  'plugins manually once the profile switch is complete!<br /><br />' +
-                  'If you want to switch profiles at a later point in time and need help, ' +
-                  'please consult our wiki:<br /><br />' +
-                  '[url=https://wiki.nexusmods.com/index.php/Setting_up_profiles_in_Vortex]' +
-                  'Setting up profiles in Vortex[/url]',
-                  {
-                    replace: {
-                      active: this.getProfileText(activeProfile),
-                      selected: this.getProfileText(selectedProfile.profile),
-                    },
-                  }),
-        options: { wrap: true },
-      }, [
-        {
-          label: 'Close',
-        },
-        {
-          label: 'Switch Profile', action: () => this.commenceSwitch(selectedProfile.id),
-        },
-      ]);
-    };
-
-    this.context.api.sendNotification({
-      type: 'info',
-      title: t('Switch Profile'),
-      message: t('A new NMM profile has been created as part of the import process. Switch to '
-               + 'the newly created profile?'),
-      noDismiss: true,
-      actions: [
-        {
-          title: 'Switch',
-          action: dismiss => {
-            openDialog();
-            dismiss();
-          },
-        },
-        {
-          title: 'Dismiss',
-          action: dismiss => {
-            openDialog();
-            dismiss();
-          },
-        },
-      ],
     });
   }
 
@@ -996,7 +930,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private finish() {
-    const { activeProfile, gameId } = this.props;
+    const { activeProfile } = this.props;
     const { selectedProfile, installModsOnFinish } = this.state;
 
     // We're only interested in the mods we actually managed to import.
@@ -1009,23 +943,35 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       return;
     }
 
-    const store = this.context.api.store;
-    const state = store.getState();
-
     // Check whether the user wants Vortex to automatically install all imported
     //  mod archives to the selected profile.
     if (installModsOnFinish) {
-      installModsForProfile(gameId, selectedProfile.id, state, imported, store.dispatch);
+      this.installMods(imported)
+        .then(() => {
+          if (activeProfile.id !== selectedProfile.id) {
+            this.commenceSwitch(selectedProfile.id);
+          }
 
-      // Check whether the active profile is different from the selected profile.
-      //  If so, raise the switch profile notification; otherwise notify the user that
-      //  he needs to deploy the newly added mods.
-      if (activeProfile.id !== selectedProfile.id) {
-        this.notifySwitchProfile();
-      }
+          return Promise.resolve();
+        });
     }
 
     this.next();
+  }
+
+  private installMods(modEntries: IModEntry[]) {
+    const state = this.context.api.store.getState();
+    const downloads = util.getSafe(state, ['persistent', 'downloads', 'files'], undefined);
+    if (downloads === undefined) {
+      // We clearly didn't manage to import anything.
+      return Promise.reject(new Error('persistent.downloads.files is empty!'));
+    }
+
+    const archiveIds = Object.keys(downloads).filter(key =>
+      modEntries.find(mod => mod.modFilename === downloads[key].localPath) !== undefined);
+    return Promise.each(archiveIds, archiveId => {
+      this.context.api.events.emit('start-install-download', archiveId);
+    });
   }
 
   private start() {
