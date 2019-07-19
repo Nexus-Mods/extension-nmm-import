@@ -512,7 +512,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           </div>
           <ul>
             <li>{t('Copy over all archives found inside the selected NMM installation.')}</li>
-            <li>{t('Reorder your plugin list based on LOOT rules.')}</li>
+            <li>{t('Provide the option to install imported archives at the end of the '
+                 + 'import process.')}</li>
             <li>{t('Require sufficient disk space as imported archives will '
                  + 'be copied (rather than moved).')}</li>
             <li>{t('Leave your existing NMM installation disabled, but functionally intact.')}</li>
@@ -525,7 +526,15 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           </div>
           <ul>
             <li>
-              {t('Import extracted mod files')}
+              {t('Allow you to proceed with import unless you\'ve disabled ALL mods within NMM.')}
+            </li>
+            <li>
+              {t('Import extracted mod files.')}
+            </li>
+            <li>
+              {t('Automatically enable mods for you. Once the archives have been installed '
+               + 'it is your responsibility to decide which mods to enable; and whether to use '
+               + 'profiles or not.')}
             </li>
             <li>
               {t('Import any mod files in your data folder that are ')}
@@ -534,12 +543,12 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
               {t('expected inside Vortex.')}
             </li>
             <li>
-              {t('import your FOMOD options. After importing, Vortex will provide you with the '
+              {t('Import your FOMOD options. After importing, Vortex will provide you with the '
                + 'option to go through the installation process for all imported archives.')}
             </li>
             <li>
               {t('Preserve your plugin load order, '
-               + 'as plugins will be rearranged according to LOOT rules.')}
+               + 'as plugins will be rearranged according to LOOT rules once enabled.')}
             </li>
           </ul>
         </div>
