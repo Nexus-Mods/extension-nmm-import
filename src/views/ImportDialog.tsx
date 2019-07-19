@@ -19,7 +19,7 @@ import { Alert, Button, MenuItem, ProgressBar, SplitButton } from 'react-bootstr
 import { withTranslation } from 'react-i18next';
 import { connect } from 'react-redux';
 import * as Redux from 'redux';
-import { ComponentEx, fs, Icon, ITableRowAction, Modal,
+import { ComponentEx, fs, Icon, ITableRowAction, log, Modal,
          selectors, Spinner, Steps, Table, Toggle, types, util } from 'vortex-api';
 
 import * as Promise from 'bluebird';
@@ -200,7 +200,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   public render(): JSX.Element {
     const { t, importStep } = this.props;
-    const { error, sources, capacityInformation, canImport } = this.state;
+    const { error, sources, capacityInformation } = this.state;
 
     const canCancel = ((['start', 'setup'].indexOf(importStep) !== -1)
                    || (error !== undefined));
@@ -372,9 +372,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   // To be used after the import process finished. Will return
-  //  an array containing successfully imported mods. This will
-  //  ignore archive import errors as the mods should still
-  //  be deployable even if the archives encountered issues.
+  //  an array containing successfully imported archives.
   private getSuccessfullyImported(): IModEntry[] {
     const { failedImports, modsToImport } = this.state;
     const enabledMods = Object.keys(modsToImport)
@@ -824,7 +822,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const archiveIds = Object.keys(downloads).filter(key =>
       modEntries.find(mod => mod.modFilename === downloads[key].localPath) !== undefined);
     return Promise.each(archiveIds, archiveId => {
-      this.context.api.events.emit('start-install-download', archiveId);
+      this.context.api.events.emit('start-install-download', archiveId, true);
     });
   }
 
@@ -960,60 +958,55 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   const id = path.basename(input, path.extname(input));
   const cacheBasePath = path.resolve(sourcePath, 'cache', id);
-  return fs.readFileAsync(path.join(cacheBasePath, 'cacheInfo.txt'))
-    .then(data => {
-      const fields = data.toString().split('@@');
-      return fs.readFileAsync(path.join(cacheBasePath,
-        (fields[1] === '-') ? '' : fields[1], 'fomod', 'info.xml'));
-    })
-    .then(infoXmlData => {
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(infoXmlData.toString(), 'text/xml');
-      const modName = getInner(xmlDoc.querySelector('Name')) || id;
-      const version = getInner(xmlDoc.querySelector('Version')) || '';
-      const modId = getInner(xmlDoc.querySelector('Id')) || '';
-      const downloadId = () => {
-        try {
-          return Number.parseInt(getInner(xmlDoc.querySelector('DownloadId')), 10);
-        } catch (err) {
-          return 0;
-        }
-      };
+  return this.fileChecksum(path.join(sourcePath, input))
+    .then(md5 => fs.readFileAsync(path.join(cacheBasePath, 'cacheInfo.txt'))
+      .then(data => {
+        const fields = data.toString().split('@@');
+        return fs.readFileAsync(path.join(cacheBasePath,
+          (fields[1] === '-') ? '' : fields[1], 'fomod', 'info.xml'));
+      })
+      .then(infoXmlData => {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(infoXmlData.toString(), 'text/xml');
+        const modName = getInner(xmlDoc.querySelector('Name')) || id;
+        const version = getInner(xmlDoc.querySelector('Version')) || '';
+        const modId = getInner(xmlDoc.querySelector('Id')) || '';
+        const downloadId = () => {
+          try {
+            return Number.parseInt(getInner(xmlDoc.querySelector('DownloadId')), 10);
+          } catch (err) {
+            return 0;
+          }
+        };
 
-      return this.fileChecksum(path.join(sourcePath, input))
-        .then(md5 => {
-          const modEntry: IModEntry = {
-            nexusId: modId,
-            vortexId: '',
-            downloadId: downloadId(),
-            modName,
-            modFilename: input,
-            archivePath: sourcePath,
-            modVersion: version,
-            archiveMD5: md5,
-            importFlag: true,
-            isAlreadyManaged: isDuplicate(),
-          };
-          return Promise.resolve(modEntry);
+        return Promise.resolve({
+          nexusId: modId,
+          vortexId: '',
+          downloadId: downloadId(),
+          modName,
+          modFilename: input,
+          archivePath: sourcePath,
+          modVersion: version,
+          archiveMD5: md5,
+          importFlag: true,
+          isAlreadyManaged: isDuplicate(),
         });
-    })
-    .catch(err => {
-      return this.fileChecksum(path.join(sourcePath, input))
-        .then(md5 => {
-          return Promise.resolve({
-            nexusId: '',
-            vortexId: '',
-            downloadId: 0,
-            modName: path.basename(input, path.extname(input)),
-            modFilename: input,
-            archivePath: sourcePath,
-            modVersion: '',
-            archiveMD5: md5,
-            importFlag: true,
-            isAlreadyManaged: isDuplicate(),
-          });
+      })
+      .catch(err => {
+        log('error', 'could not parse the mod\'s cache information', err);
+        return Promise.resolve({
+          nexusId: '',
+          vortexId: '',
+          downloadId: 0,
+          modName: path.basename(input, path.extname(input)),
+          modFilename: input,
+          archivePath: sourcePath,
+          modVersion: '',
+          archiveMD5: md5,
+          importFlag: true,
+          isAlreadyManaged: isDuplicate(),
         });
-    });
+    }));
 }
 
   private getArchives() {
@@ -1059,6 +1052,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const { gameId } = this.props;
     const { modsToImport, selectedSource } = this.state;
 
+    const autoSortEnabled = util.getSafe(this.context.api.store.getState(),
+      ['settings', 'plugins', 'autosort'], false);
     this.mTrace = new TraceImport();
 
     const modList = Object.keys(modsToImport).map(id => modsToImport[id]);
@@ -1079,17 +1074,31 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         this.mTrace.log('info', 'NMM Mods (count): ' + modList.length +
           ' - Importing (count):' + enabledMods.length);
         this.context.api.events.emit('enable-download-watch', false);
+
+        if (autoSortEnabled) {
+          // We don't want the sorting functionality to kick off as the user
+          //  is removing plugins through NMM with Vortex open.
+          this.context.api.events.emit('autosort-plugins', false);
+        }
         return importArchives(this.context.api, gameId, this.mTrace, modsPath, enabledMods,
           categories, (mod: string, pos: number) => {
             this.nextState.progress = { mod, pos };
           })
           .then(errors => {
+            if (autoSortEnabled) {
+              // Auto sort _was_ enabled but we disabled it - time to re-enable.
+              this.context.api.events.emit('autosort-plugins', true);
+            }
             this.context.api.events.emit('enable-download-watch', true);
             this.nextState.failedImports = errors;
             this.props.onSetStep('review');
           });
         })
         .catch(err => {
+          if (autoSortEnabled) {
+            // Auto sort _was_ enabled but we disabled it - time to re-enable.
+            this.context.api.events.emit('autosort-plugins', true);
+          }
           this.context.api.events.emit('enable-download-watch', true);
           this.nextState.error = err.message;
         });
