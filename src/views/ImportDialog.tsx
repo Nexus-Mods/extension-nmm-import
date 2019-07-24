@@ -20,11 +20,16 @@ import { withTranslation } from 'react-i18next';
 import { connect } from 'react-redux';
 import * as Redux from 'redux';
 import { ComponentEx, fs, Icon, ITableRowAction, log, Modal,
-         selectors, Spinner, Steps, Table, Toggle, types, util } from 'vortex-api';
+         selectors, Spinner, Steps, Table, Toggle, tooltip, types, util } from 'vortex-api';
+
+import { app, remote } from 'electron';
+const appUni = app || remote.app;
+const IMAGES_FOLDER = path.join(appUni.getAppPath(), 'assets', 'images');
 
 import * as Promise from 'bluebird';
 
 import { createHash } from 'crypto';
+import { valid } from 'semver';
 
 type Step = 'start' | 'setup' | 'working' | 'review';
 
@@ -57,7 +62,6 @@ interface IConnectedProps {
 }
 
 interface ICapacityInfo {
-  desc: string;
   rootPath: string;
   totalNeededBytes: number;
   totalFreeBytes: number;
@@ -84,6 +88,9 @@ interface IComponentState {
 
   // Dictates whether we can start the import process.
   canImport: boolean;
+
+  // State of the plugin sorting functionality.
+  autoSortEnabled: boolean;
 
   // Disk space calculation variables.
   capacityInformation: ICapacityInfo;
@@ -121,9 +128,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       progress: undefined,
       failedImports: [],
       canImport: false,
+      autoSortEnabled: false,
 
       capacityInformation: {
-        desc: 'Archive Files',
         rootPath: '',
         totalNeededBytes: 0,
         totalFreeBytes: 0,
@@ -200,9 +207,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   public render(): JSX.Element {
     const { t, importStep } = this.props;
-    const { error, sources, capacityInformation } = this.state;
+    const { canImport, error, sources, capacityInformation } = this.state;
 
     const canCancel = ((['start', 'setup'].indexOf(importStep) !== -1)
+                   || ((importStep === 'working') && (!canImport))
                    || (error !== undefined));
     const nextLabel = ((sources !== undefined) && (sources.length > 0))
       ? this.nextLabel(importStep)
@@ -217,7 +225,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           <Modal.Title>{t('Nexus Mod Manager (NMM) Import Tool')}</Modal.Title>
           {this.renderCurrentStep()}
         </Modal.Header>
-        <Modal.Body style={{ height: '60vh', display: 'flex', flexDirection: 'column' }}>
+        <Modal.Body>
           {
             error !== undefined
               ? <Alert bsStyle='danger'>{error}</Alert>
@@ -225,7 +233,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           }
         </Modal.Body>
         <Modal.Footer>
-          {importStep === 'setup' && this.getCapacityInfo(capacityInformation)}
           {importStep === 'setup' && capacityInformation.hasCalculationErrors ? (
             <Alert bsStyle='danger'>
               {t('Vortex cannot validate NMM\'s mod/archive files - this usually occurs when '
@@ -253,13 +260,13 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     this.nextState.progress = undefined;
     this.nextState.failedImports = [];
     this.nextState.capacityInformation = {
-        desc: 'Archive Files',
         rootPath: '',
         totalNeededBytes: 0,
         totalFreeBytes: 0,
         hasCalculationErrors: false,
     };
     this.nextState.installModsOnFinish = false;
+    this.nextState.autoSortEnabled = false;
     this.nextState.successfullyImported = [];
   }
 
@@ -391,15 +398,14 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const { t } = this.props;
     return (
       <div>
-          <p
+          <h3
             className={(instance.totalNeededBytes > instance.totalFreeBytes)
               ? 'disk-space-insufficient'
               : 'disk-space-sufficient'}
           >
             {
-            t('{{desc}}: {{rootPath}} - Size required: {{required}} / {{available}}', {
+            t('{{rootPath}} - Size required: {{required}} / {{available}}', {
               replace: {
-                desc: t(instance.desc),
                 rootPath: instance.rootPath,
                 required: instance.hasCalculationErrors
                   ? '???'
@@ -407,14 +413,14 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
                 available: util.bytesToString(instance.totalFreeBytes),
               },
             })}
-          </p>
+          </h3>
       </div>
     );
   }
 
   private isNextDisabled = () => {
     const { importStep } = this.props;
-    const { canImport, error, modsToImport, capacityInformation } = this.state;
+    const { error, modsToImport, capacityInformation } = this.state;
 
     const enabled = (modsToImport !== undefined)
       ? Object.keys(modsToImport).filter(id => this.isModEnabled(modsToImport[id]))
@@ -426,8 +432,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     return (error !== undefined)
         || ((importStep === 'setup') && (modsToImport === undefined))
         || ((importStep === 'setup') && (enabled.length === 0))
-        || ((importStep === 'setup') && (hasSpace))
-        || ((importStep === 'setup') && (!canImport));
+        || ((importStep === 'setup') && (hasSpace));
   }
 
   private renderCurrentStep(): JSX.Element {
@@ -478,8 +483,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const { canImport } = this.state;
     switch (state) {
       case 'start': return this.renderStart();
-      case 'setup': return (canImport) ? this.renderSelectMods() : this.renderValidation();
-      case 'working': return this.renderWorking();
+      case 'setup': return this.renderSelectMods();
+      case 'working': return (canImport) ? this.renderWorking() : this.renderValidation();
       case 'review': return this.renderReview();
       default: return null;
     }
@@ -499,9 +504,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         <div>
           {t('This is an import tool that allows you to bring your mod archives over from an '
           + 'existing NMM installation.')} <br/>
-          {t('Please note that the process has a number of limitations, and ')}
-          {this.getLink(_LINKS.TO_CONSIDER,
-            'starting with a fresh mod install is therefore recommended.')}
         </div>
         <div>
           <div className='import-will'>
@@ -512,8 +514,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
             <li>{t('Copy over all archives found inside the selected NMM installation.')}</li>
             <li>{t('Provide the option to install imported archives at the end of the '
                  + 'import process.')}</li>
-            <li>{t('Require sufficient disk space as imported archives will '
-                 + 'be copied (rather than moved).')}</li>
             <li>{t('Leave your existing NMM installation disabled, but functionally intact.')}</li>
           </ul>
         </div>
@@ -524,25 +524,13 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           </div>
           <ul>
             <li>
-              {t('Allow you to proceed with import unless you\'ve disabled ALL mods within NMM.')}
-            </li>
-            <li>
-              {t('Import extracted mod files.')}
-            </li>
-            <li>
-              {t('Automatically enable mods for you. Once the archives have been installed '
-               + 'it is your responsibility to decide which mods to enable; and whether to use '
-               + 'profiles or not.')}
-            </li>
-            <li>
               {t('Import any mod files in your data folder that are ')}
               {this.getLink(_LINKS.UNMANAGED, 'not managed by NMM. ')}
               {t('If you have mods reliant on unmanaged files, those mods might not work as ')}
               {t('expected inside Vortex.')}
             </li>
             <li>
-              {t('Import your FOMOD options. After importing, Vortex will provide you with the '
-               + 'option to go through the installation process for all imported archives.')}
+              {t('Import your FOMOD options.')}
             </li>
             <li>
               {t('Preserve your plugin load order, '
@@ -601,29 +589,35 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     this.nextState.installModsOnFinish = !installModsOnFinish;
   }
 
+  private getImageSource(fileName: string) {
+    const images =  path.join(IMAGES_FOLDER, fileName);
+    return `file://${images}`;
+  }
+
   private renderValidation(): JSX.Element {
     const { t } = this.props;
     const { busy } = this.state;
     const content = (
       <div className='is-not-valid'>
-        <h1>Warning!</h1>
+        <div className='not-valid-title'>
+          <img src={this.getImageSource('nmmdisabled.svg')}/>
+          <h1>Disable Your Mods</h1>
+        </div>
         <span>
-        {t('In order for the import process to function correctly, your mods folder must not ')}
-        {t('contain any mods managed by NMM.')}<br/><br/>
-        {t('Vortex has detected mods installed via NMM. Please minimise Vortex, switch to NMM ')}
-        {t('and disable all mods currently installed via NMM.')}<br/><br/>
-        {t('You cannot proceed with the import process without completing this step.')}<br/><br/>
-        {t('')}
+          {t('Please disable all of your active mods in NMM. You cannot proceed with the '
+           + 'import process without completing this step.')}
         </span>
+        <img src={this.getImageSource('disablenmm.png')}/>
         <div className='revalidate-area'>
-          <Button
-            className='revalidate-button'
-            onClick={this.validate}
-            disabled={busy}
-          >
-            {busy ? <Icon name='spinner' /> : <Icon name='refresh' />}
-          </Button>
-          {t('Check again')}
+        <tooltip.IconButton
+          id='revalidate-button'
+          icon={busy ? 'spinner' : 'refresh'}
+          tooltip={busy ? t('Checking') : t('Check again')}
+          disabled={busy}
+          onClick={this.validate}
+        >
+          {t('Refresh')}
+        </tooltip.IconButton>
         </div>
       </div>
     );
@@ -633,7 +627,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private renderSelectMods(): JSX.Element {
     const { t } = this.props;
-    const { counter, modsToImport, progress } = this.state;
+    const { counter, modsToImport, progress, capacityInformation } = this.state;
 
     const calcProgress = (!!progress)
       ? (
@@ -643,8 +637,15 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           </h3>
           {t('Currently calculating for: {{mod}}', {replace: { mod: progress.mod }})}
         </span>
-        )
-      : null;
+      )
+      : (
+        <span>
+          <h3>
+            {t('Processing NMM cache information. Thank you for your patience.')}
+          </h3>
+          {t('Looking up archives..')}
+        </span>
+      );
 
     const content = (modsToImport === undefined)
       ? (
@@ -667,7 +668,12 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       <div className='import-mods-selection'>
         {content}
         {(modNumberText !== undefined)
-          ? (<h3>{t(`Importing: ${this.getModNumber()} mods`)}</h3>)
+          ? (
+              <div>
+                <h3>{t(`Importing: ${this.getModNumber()} mods`)}</h3>
+                {this.getCapacityInfo(capacityInformation)}
+              </div>
+            )
           : null}
       </div>
     );
@@ -684,7 +690,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       <div className='import-working-container'>
         <span>
           <h3>
-            {t('Mods are being copied. This might take a while. Thank you for your patience.')}
+            {t('Archives are being copied. This might take a while. Thank you for your patience.')}
           </h3>
           {t('Currently importing: {{mod}}', {replace: { mod: progress.mod }})}
         </span>
@@ -790,7 +796,14 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private finish() {
-    const { installModsOnFinish } = this.state;
+    const { autoSortEnabled, installModsOnFinish } = this.state;
+
+    const enableSorting = () => {
+      if (autoSortEnabled) {
+        // Auto sort _was_ enabled but we disabled it - time to re-enable.
+        this.context.api.events.emit('autosort-plugins', true);
+      }
+    };
 
     // We're only interested in the mods we actually managed to import.
     const imported = this.getSuccessfullyImported();
@@ -798,6 +811,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     // If we did not succeed in importing anything, there's no point in
     //  enabling anything.
     if (imported.length === 0) {
+      enableSorting();
       this.next();
       return;
     }
@@ -805,7 +819,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     // Check whether the user wants Vortex to automatically install all imported
     //  mod archives.
     if (installModsOnFinish) {
-      this.installMods(imported);
+      this.installMods(imported)
+        .then(() => { enableSorting(); });
     }
 
     this.next();
@@ -830,6 +845,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const { capacityInformation } = this.nextState;
     const { downloadPath } = this.props;
     this.nextState.error = undefined;
+
+    // Store the initial value of the plugin sorting functionality (if it's even applicable)
+    this.nextState.autoSortEnabled = util.getSafe(this.context.api.store.getState(),
+      ['settings', 'plugins', 'autosort'], false);
 
     try {
       capacityInformation.rootPath = winapi.GetVolumePathName(downloadPath);
@@ -867,7 +886,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private setup() {
     const { gameId } = this.props;
-    this.validate();
     const virtualPath =
       path.join(this.state.selectedSource[0], 'VirtualInstall', 'VirtualModConfig.xml');
     const state: types.IState = this.context.api.store.getState();
@@ -1050,58 +1068,63 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private startImport() {
     const { gameId } = this.props;
-    const { modsToImport, selectedSource } = this.state;
+    const { autoSortEnabled, modsToImport, selectedSource } = this.state;
+    const startImportProcess = (): Promise<void> => {
+      this.mTrace = new TraceImport();
 
-    const autoSortEnabled = util.getSafe(this.context.api.store.getState(),
-      ['settings', 'plugins', 'autosort'], false);
-    this.mTrace = new TraceImport();
+      if (autoSortEnabled) {
+        // We don't want the sorting functionality to kick off as the user
+        //  is removing plugins through NMM with Vortex open.
+        this.context.api.events.emit('autosort-plugins', false);
+      }
+      const modList = Object.keys(modsToImport).map(id => modsToImport[id]);
+      const enabledMods = modList.filter(mod => this.isModEnabled(mod));
+      const modsPath = selectedSource[2];
+      this.mTrace.initDirectory(selectedSource[0]);
+      // The categories.xml file seems to be created by NMM inside its defined "modFolder"
+      //  and not inside the virtual folder.
+      const categoriesPath = path.join(modsPath, 'categories', 'Categories.xml');
+      return getCategories(categoriesPath)
+        .catch(err => {
+          // Do not stop the import process just because we can't import categories.
+          this.mTrace.log('error', 'Failed to import categories from NMM', err);
+          return Promise.resolve({});
+        })
+        .then(categories => {
+          this.mTrace.log('info', 'NMM Mods (count): ' + modList.length +
+            ' - Importing (count):' + enabledMods.length);
+          this.context.api.events.emit('enable-download-watch', false);
 
-    const modList = Object.keys(modsToImport).map(id => modsToImport[id]);
-    const enabledMods = modList.filter(mod => this.isModEnabled(mod));
-    const modsPath = selectedSource[2];
-
-    this.mTrace.initDirectory(selectedSource[0]);
-    // The categories.xml file seems to be created by NMM inside its defined "modFolder"
-    //  and not inside the virtual folder.
-    const categoriesPath = path.join(modsPath, 'categories', 'Categories.xml');
-    return getCategories(categoriesPath)
-      .catch(err => {
-        // Do not stop the import process just because we can't import categories.
-        this.mTrace.log('error', 'Failed to import categories from NMM', err);
-        return Promise.resolve({});
-      })
-      .then(categories => {
-        this.mTrace.log('info', 'NMM Mods (count): ' + modList.length +
-          ' - Importing (count):' + enabledMods.length);
-        this.context.api.events.emit('enable-download-watch', false);
-
-        if (autoSortEnabled) {
-          // We don't want the sorting functionality to kick off as the user
-          //  is removing plugins through NMM with Vortex open.
-          this.context.api.events.emit('autosort-plugins', false);
-        }
-        return importArchives(this.context.api, gameId, this.mTrace, modsPath, enabledMods,
-          categories, (mod: string, pos: number) => {
-            this.nextState.progress = { mod, pos };
+          return importArchives(this.context.api, gameId, this.mTrace, modsPath, enabledMods,
+            categories, (mod: string, pos: number) => {
+              this.nextState.progress = { mod, pos };
+            })
+            .then(errors => {
+              this.context.api.events.emit('enable-download-watch', true);
+              this.nextState.failedImports = errors;
+              this.props.onSetStep('review');
+            });
           })
-          .then(errors => {
+          .catch(err => {
             if (autoSortEnabled) {
               // Auto sort _was_ enabled but we disabled it - time to re-enable.
               this.context.api.events.emit('autosort-plugins', true);
             }
             this.context.api.events.emit('enable-download-watch', true);
-            this.nextState.failedImports = errors;
-            this.props.onSetStep('review');
+            this.nextState.error = err.message;
           });
-        })
-        .catch(err => {
-          if (autoSortEnabled) {
-            // Auto sort _was_ enabled but we disabled it - time to re-enable.
-            this.context.api.events.emit('autosort-plugins', true);
-          }
-          this.context.api.events.emit('enable-download-watch', true);
-          this.nextState.error = err.message;
-        });
+    };
+
+    const validateLoop = () => this.nextState.canImport
+      ? startImportProcess()
+      : setTimeout(() => validateLoop(), 2000);
+
+    this.nextState.busy = true;
+    return isConfigEmpty(path.join(selectedSource[0], 'VirtualInstall', 'VirtualModConfig.xml'))
+      .then(res => {
+        this.nextState.canImport = res;
+        this.nextState.busy = false;
+      }).then(() => validateLoop());
   }
 }
 
