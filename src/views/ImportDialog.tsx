@@ -600,7 +600,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const content = (
       <div className='is-not-valid'>
         <div className='not-valid-title'>
-          <img src={this.getImageSource('nmmdisabled.svg')}/>
+          <img src={this.getImageSource('disabled.svg')}/>
           <h1>Disable Your Mods</h1>
         </div>
         <span>
