@@ -92,12 +92,29 @@
   }
 }
 
+.start-info {
+  display: flex;
+  justify-content: space-evenly;
+  flex-wrap: wrap;
+}
+
 .import-wont {
-  @extend .h4;
-  svg {
-    fill: $brand-danger;
-    width: 2em;
-    height: 2em;
+  display: inherit;
+  width: 40%;
+  .negative-item {
+    display: inherit;
+    align-items: center;
+  
+    font-size: 16px;
+    font-weight: normal;
+    font-style: normal;
+    font-stretch: normal;
+    line-height: 1.5;
+    letter-spacing: 0.15px;
+    svg {
+      width: 10%;
+      fill: $brand-danger;
+    }
   }
 }
 
@@ -109,11 +126,22 @@
 }
 
 .import-will {
-  @extend .h4;
-  svg {
-    fill: $brand-success;
-    width: 2em;
-    height: 2em;
+  display: inherit;
+  width: 40%;
+  .positive-item {
+    display: inherit;
+    align-items: center;
+
+    font-size: 16px;
+    font-weight: normal;
+    font-style: normal;
+    font-stretch: normal;
+    line-height: 1.5;
+    letter-spacing: 0.15px;
+    svg {
+      width: 10%;
+      fill: $brand-success;
+    }
   }
 }
 

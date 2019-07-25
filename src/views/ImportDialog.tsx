@@ -29,7 +29,6 @@ const IMAGES_FOLDER = path.join(appUni.getAppPath(), 'assets', 'images');
 import * as Promise from 'bluebird';
 
 import { createHash } from 'crypto';
-import { valid } from 'semver';
 
 type Step = 'start' | 'setup' | 'working' | 'review';
 
@@ -494,6 +493,49 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const { t } = this.props;
     const { sources, selectedSource } = this.state;
 
+    const positives: string[] = [
+      'Copy over all archives found inside the selected NMM installation.',
+
+      'Provide the option to install imported archives at the end of the '
+      + 'import process.',
+
+      'Leave your existing NMM installation disabled, but functionally intact.',
+    ];
+
+    const negatives: string[] = [
+      'Import any mod files in your data folder that are not managed by NMM.',
+
+      'Import your FOMOD options.',
+
+      'Preserve your plugin load order, as plugins will be rearranged according'
+      + 'to LOOT rules once enabled.',
+    ];
+
+    const renderItem = (text: string, positive: boolean): JSX.Element => (
+      <div className={positive ? 'positive-item' : 'negative-item'}>
+        <Icon name={positive ? 'feedback-success' : 'feedback-error'}/>
+        <p>{t(`${text}`)}</p>
+      </div>
+    );
+
+    const renderPositives = (): JSX.Element => (
+      <div className='import-will'>
+        {t('The import tool will:')}
+        <span>
+          {positives.map(positive => renderItem(positive, true))}
+        </span>
+      </div>
+    );
+
+    const renderNegatives = (): JSX.Element => (
+        <div className='import-wont'>
+          {t('The import tool won’t:')}
+          <span>
+            {negatives.map(negative => renderItem(negative, false))}
+          </span>
+        </div>
+    );
+
     return (
       <span
         style={{
@@ -505,38 +547,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           {t('This is an import tool that allows you to bring your mod archives over from an '
           + 'existing NMM installation.')} <br/>
         </div>
-        <div>
-          <div className='import-will'>
-            <Icon name='feedback-success' />
-            {t('The import tool will:')}
-          </div>
-          <ul>
-            <li>{t('Copy over all archives found inside the selected NMM installation.')}</li>
-            <li>{t('Provide the option to install imported archives at the end of the '
-                 + 'import process.')}</li>
-            <li>{t('Leave your existing NMM installation disabled, but functionally intact.')}</li>
-          </ul>
-        </div>
-        <div>
-          <div className='import-wont'>
-            <Icon name='feedback-error' />
-            {t('The import tool won’t:')}
-          </div>
-          <ul>
-            <li>
-              {t('Import any mod files in your data folder that are ')}
-              {this.getLink(_LINKS.UNMANAGED, 'not managed by NMM. ')}
-              {t('If you have mods reliant on unmanaged files, those mods might not work as ')}
-              {t('expected inside Vortex.')}
-            </li>
-            <li>
-              {t('Import your FOMOD options.')}
-            </li>
-            <li>
-              {t('Preserve your plugin load order, '
-               + 'as plugins will be rearranged according to LOOT rules once enabled.')}
-            </li>
-          </ul>
+        <div className='start-info'>
+          {renderPositives()}
+          {renderNegatives()}
         </div>
         {sources === undefined
           ? <Spinner />
@@ -910,7 +923,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
     return this.getArchives()
       .then(archives => Promise.map(archives, archive => {
-        return this.createModEntry(selectedSource[0], archive, existingDownloads)
+        return this.createModEntry(selectedSource[2], archive, existingDownloads)
           .then(mod => {
             progress(mod.modFilename);
             mods[mod.modFilename] = mod;
@@ -1037,12 +1050,23 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       });
   }
 
+  private isNMMRunning(): boolean {
+    const processes = winapi.GetProcessList();
+    const runningExes: { [exeId: string]: winapi.ProcessEntry } =
+      processes.reduce((prev, entry) => {
+        prev[entry.exeFile.toLowerCase()] = entry;
+        return prev;
+      }, {});
+
+    return Object.keys(runningExes).find(key => key === 'nexusclient.exe') !== undefined;
+  }
+
   private validate = () => {
     const { selectedSource } = this.state;
     this.nextState.busy = true;
     isConfigEmpty(path.join(selectedSource[0], 'VirtualInstall', 'VirtualModConfig.xml'))
       .then(res => {
-        this.nextState.canImport = res;
+        this.nextState.canImport = res && !this.isNMMRunning();
         this.nextState.busy = false;
       });
   }
@@ -1117,7 +1141,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     this.nextState.busy = true;
     return isConfigEmpty(path.join(selectedSource[0], 'VirtualInstall', 'VirtualModConfig.xml'))
       .then(res => {
-        this.nextState.canImport = res;
+        this.nextState.canImport = res && !this.isNMMRunning();
         this.nextState.busy = false;
       }).then(() => validateLoop());
   }
