@@ -1043,7 +1043,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const modFileNames = new Set<string>(Object.keys(parsedMods)
       .map(key => parsedMods[key].modFilename));
 
-    return fs.readdirAsync(selectedSource[0])
+    return fs.readdirAsync(selectedSource[2])
       .filter(filePath => knownArchiveExt(filePath))
       .then(archives => archives.filter(archive => !modFileNames.has(archive)))
       .catch(err => {
