@@ -796,14 +796,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private finish() {
-    const { autoSortEnabled, installModsOnFinish } = this.state;
-
-    const enableSorting = () => {
-      if (autoSortEnabled) {
-        // Auto sort _was_ enabled but we disabled it - time to re-enable.
-        this.context.api.events.emit('autosort-plugins', true);
-      }
-    };
+    const { installModsOnFinish } = this.state;
 
     // We're only interested in the mods we actually managed to import.
     const imported = this.getSuccessfullyImported();
@@ -811,7 +804,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     // If we did not succeed in importing anything, there's no point in
     //  enabling anything.
     if (imported.length === 0) {
-      enableSorting();
       this.next();
       return;
     }
@@ -819,8 +811,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     // Check whether the user wants Vortex to automatically install all imported
     //  mod archives.
     if (installModsOnFinish) {
-      this.installMods(imported)
-        .then(() => { enableSorting(); });
+      this.installMods(imported);
     }
 
     this.next();
@@ -1077,6 +1068,13 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     }
 
     const startImportProcess = (): Promise<void> => {
+      if (autoSortEnabled) {
+        // If we're able to start the import process, then clearly
+        //  the user had already disabled the mods through NMM
+        //  should be safe to turn autosort back on.
+        this.context.api.events.emit('autosort-plugins', true);
+      }
+
       this.mTrace = new TraceImport();
       const modList = Object.keys(modsToImport).map(id => modsToImport[id]);
       const enabledMods = modList.filter(mod => this.isModEnabled(mod));
@@ -1107,10 +1105,6 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
             });
           })
           .catch(err => {
-            if (autoSortEnabled) {
-              // Auto sort _was_ enabled but we disabled it - time to re-enable.
-              this.context.api.events.emit('autosort-plugins', true);
-            }
             this.context.api.events.emit('enable-download-watch', true);
             this.nextState.error = err.message;
           });
