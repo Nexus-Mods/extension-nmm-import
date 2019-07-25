@@ -100,9 +100,10 @@
 
 .import-wont {
   display: inherit;
+  flex-direction: column;
   width: 40%;
   .negative-item {
-    display: inherit;
+    display: flex;
     align-items: center;
   
     font-size: 16px;
@@ -127,9 +128,10 @@
 
 .import-will {
   display: inherit;
+  flex-direction: column;
   width: 40%;
   .positive-item {
-    display: inherit;
+    display: flex;
     align-items: center;
 
     font-size: 16px;
