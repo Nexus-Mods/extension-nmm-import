@@ -620,7 +620,11 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           {t('Please disable all of your active mods in NMM. You cannot proceed with the '
            + 'import process without completing this step.')}
            <br/>
+           <br/>
            {t('Once disabled, NMM needs to be closed before the import proceeds!')}
+           <br/>
+           <br/>
+           {t('Please note that mods should be just disabled and NOT uninstalled!')}
         </span>
         <img src={this.getImageSource('disablenmm.png')}/>
         <div className='revalidate-area'>
