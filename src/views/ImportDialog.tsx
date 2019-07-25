@@ -614,7 +614,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       <div className='is-not-valid'>
         <div className='not-valid-title'>
           <img src={this.getImageSource('disabled.svg')}/>
-          <h1>Disable Your Mods</h1>
+          <h1>Disable Your Mods And Close NMM</h1>
         </div>
         <span>
           {t('Please disable all of your active mods in NMM. You cannot proceed with the '
