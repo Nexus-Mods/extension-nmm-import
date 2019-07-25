@@ -15,11 +15,11 @@ import {
 
 import * as path from 'path';
 import * as React from 'react';
-import { Alert, Button, MenuItem, ProgressBar, SplitButton } from 'react-bootstrap';
+import { Alert, Button, MenuItem, ProgressBar, SplitButton, ListGroup, ListGroupItem } from 'react-bootstrap';
 import { withTranslation } from 'react-i18next';
 import { connect } from 'react-redux';
 import * as Redux from 'redux';
-import { ComponentEx, fs, Icon, ITableRowAction, log, Modal,
+import { ComponentEx, EmptyPlaceholder, fs, Icon, ITableRowAction, log, Modal,
          selectors, Spinner, Steps, Table, Toggle, tooltip, types, util } from 'vortex-api';
 
 import { app, remote } from 'electron';
@@ -86,7 +86,8 @@ interface IComponentState {
   failedImports: string[];
 
   // Dictates whether we can start the import process.
-  canImport: boolean;
+  nmmModsEnabled: boolean;
+  nmmRunning: boolean;
 
   // State of the plugin sorting functionality.
   autoSortEnabled: boolean;
@@ -126,7 +127,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       counter: 0,
       progress: undefined,
       failedImports: [],
-      canImport: false,
+      nmmModsEnabled: false,
+      nmmRunning: false,
       autoSortEnabled: false,
 
       capacityInformation: {
@@ -206,10 +208,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   public render(): JSX.Element {
     const { t, importStep } = this.props;
-    const { canImport, error, sources, capacityInformation } = this.state;
+    const { error, sources, capacityInformation } = this.state;
 
     const canCancel = ((['start', 'setup'].indexOf(importStep) !== -1)
-                   || ((importStep === 'working') && (!canImport))
+                   || ((importStep === 'working') && (!this.canImport()))
                    || (error !== undefined));
     const nextLabel = ((sources !== undefined) && (sources.length > 0))
       ? this.nextLabel(importStep)
@@ -267,6 +269,11 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     this.nextState.installModsOnFinish = false;
     this.nextState.autoSortEnabled = false;
     this.nextState.successfullyImported = [];
+  }
+
+  private canImport() {
+    const { nmmModsEnabled, nmmRunning } = this.state;
+    return !nmmModsEnabled && !nmmRunning;
   }
 
   private onGroupAction(entries: string[], enable: boolean) {
@@ -479,11 +486,10 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private renderContent(state: Step): JSX.Element {
-    const { canImport } = this.state;
     switch (state) {
       case 'start': return this.renderStart();
       case 'setup': return this.renderSelectMods();
-      case 'working': return (canImport) ? this.renderWorking() : this.renderValidation();
+      case 'working': return (this.canImport()) ? this.renderWorking() : this.renderValidation();
       case 'review': return this.renderReview();
       default: return null;
     }
@@ -507,41 +513,38 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
       'Import your FOMOD options.',
 
-      'Preserve your plugin load order, as plugins will be rearranged according'
+      'Preserve your plugin load order, as plugins will be rearranged according '
       + 'to LOOT rules once enabled.',
     ];
 
-    const renderItem = (text: string, positive: boolean): JSX.Element => (
-      <div className={positive ? 'positive-item' : 'negative-item'}>
+    const renderItem = (text: string, idx: number, positive: boolean): JSX.Element => (
+      <div key={idx} className='import-description-item'>
         <Icon name={positive ? 'feedback-success' : 'feedback-error'}/>
-        <p>{t(`${text}`)}</p>
+        <p>{t(text)}</p>
       </div>
     );
 
     const renderPositives = (): JSX.Element => (
-      <div className='import-will'>
-        {t('The import tool will:')}
+      <div className='import-description-column import-description-positive'>
+        <h4>{t('The import tool will:')}</h4>
         <span>
-          {positives.map(positive => renderItem(positive, true))}
+          {positives.map((positive, idx) => renderItem(positive, idx, true))}
         </span>
       </div>
     );
 
     const renderNegatives = (): JSX.Element => (
-        <div className='import-wont'>
-          {t('The import tool won’t:')}
+        <div className='import-description-column import-description-negative'>
+          <h4>{t('The import tool won’t:')}</h4>
           <span>
-            {negatives.map(negative => renderItem(negative, false))}
+            {negatives.map((negative, idx) => renderItem(negative, idx, false))}
           </span>
         </div>
     );
 
     return (
       <span
-        style={{
-          display: 'flex', flexDirection: 'column',
-          justifyContent: 'space-around', height: '100%',
-        }}
+        className='import-start-container'
       >
         <div>
           {t('This is an import tool that allows you to bring your mod archives over from an '
@@ -581,11 +584,11 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       <div>
         {t('If you have multiple instances of NMM installed you can select which one '
           + 'to import here:')}
+        <br />
         <SplitButton
           id='import-select-source'
           title={selectedSource !== undefined ? selectedSource[0] || '' : ''}
           onSelect={this.selectSource}
-          style={{ marginLeft: 15 }}
         >
           {sources.map(this.renderSource)}
         </SplitButton>
@@ -602,41 +605,47 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     this.nextState.installModsOnFinish = !installModsOnFinish;
   }
 
-  private getImageSource(fileName: string) {
-    const images =  path.join(IMAGES_FOLDER, fileName);
-    return `file://${images}`;
-  }
-
   private renderValidation(): JSX.Element {
     const { t } = this.props;
-    const { busy } = this.state;
+    const { busy, nmmModsEnabled, nmmRunning } = this.state;
     const content = (
       <div className='is-not-valid'>
         <div className='not-valid-title'>
-          <img src={this.getImageSource('disabled.svg')}/>
-          <h1>Disable Your Mods And Close NMM</h1>
+          <Icon name='input-cancel' />
+          <h2>{t('Can\'t continue')}</h2>
         </div>
-        <span>
-          {t('Please disable all of your active mods in NMM. You cannot proceed with the '
-           + 'import process without completing this step.')}
-           <br/>
-           <br/>
-           {t('Once disabled, NMM needs to be closed before the import proceeds!')}
-           <br/>
-           <br/>
-           {t('Please note that mods should be just disabled and NOT uninstalled!')}
-        </span>
-        <img src={this.getImageSource('disablenmm.png')}/>
+        <ListGroup>
+          {nmmModsEnabled ? (
+            <ListGroupItem>
+              <h4>{t('Please disable all mods in NMM')}</h4>
+              <p>
+                {t('NMM and Vortex would interfere with each other if they both '
+                  + 'tried to manage the same mods.')}
+                {t('You don\'t have to uninstall the mods, just disable them.')}
+              </p>
+              <img src={`file://${__dirname}/disablenmm.png`} />
+            </ListGroupItem>
+           ) : null}
+           {nmmRunning ? (
+             <ListGroupItem>
+               <h4>{t('Please close NMM')}</h4>
+               <p>
+                 {t('NMM needs to be closed during the import process and generally '
+                  + 'while Vortex is installing mods otherwise it may interfere.')}
+               </p>
+             </ListGroupItem>
+           ) : null}
+        </ListGroup>
         <div className='revalidate-area'>
-        <tooltip.IconButton
-          id='revalidate-button'
-          icon={busy ? 'spinner' : 'refresh'}
-          tooltip={busy ? t('Checking') : t('Check again')}
-          disabled={busy}
-          onClick={this.validate}
-        >
-          {t('Refresh')}
-        </tooltip.IconButton>
+          <tooltip.IconButton
+            id='revalidate-button'
+            icon={busy ? 'spinner' : 'refresh'}
+            tooltip={busy ? t('Checking') : t('Check again')}
+            disabled={busy}
+            onClick={this.validate}
+          >
+            {t('Check again')}
+          </tooltip.IconButton>
         </div>
       </div>
     );
@@ -654,7 +663,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           <h3>
             {t('Calculating required disk space. Thank you for your patience.')}
           </h3>
-          {t('Currently calculating for: {{mod}}', {replace: { mod: progress.mod }})}
+          {t('Scanning: {{mod}}', {replace: { mod: progress.mod }})}
         </span>
       )
       : (
@@ -707,12 +716,12 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const perc = Math.floor((progress.pos * 100) / Object.keys(modsToImport).length);
     return (
       <div className='import-working-container'>
-        <span>
-          <h3>
-            {t('Archives are being copied. This might take a while. Thank you for your patience.')}
-          </h3>
-          {t('Currently importing: {{mod}}', {replace: { mod: progress.mod }})}
-        </span>
+        <EmptyPlaceholder
+          icon='folder-download'
+          text={t('Importing Mods...')}
+          subtext={t('This might take a while, please be patient')}
+        />
+        {t('Currently importing: {{mod}}', {replace: { mod: progress.mod }})}
         <ProgressBar now={perc} label={`${perc}%`} />
       </div>
     );
@@ -728,12 +737,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
             checked={installModsOnFinish}
             onToggle={this.toggleInstallOnFinish}
         >
-          <a
-            className='fake-link'
-            title={t('Install imported mods.')}
-          >
-            {t('If toggled, will install all imported mods.')}
-          </a>
+          {t('Install imported mods')}
         </Toggle>
       </div>
     ) : null;
@@ -1072,7 +1076,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     this.nextState.busy = true;
     isConfigEmpty(path.join(selectedSource[0], 'VirtualInstall', 'VirtualModConfig.xml'))
       .then(res => {
-        this.nextState.canImport = res && !this.isNMMRunning();
+        this.nextState.nmmModsEnabled = !res;
+        this.nextState.nmmRunning = this.isNMMRunning();
         this.nextState.busy = false;
       });
   }
@@ -1140,14 +1145,15 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
           });
     };
 
-    const validateLoop = () => this.nextState.canImport
+    const validateLoop = () => this.canImport()
       ? startImportProcess()
       : setTimeout(() => validateLoop(), 2000);
 
     this.nextState.busy = true;
     return isConfigEmpty(path.join(selectedSource[0], 'VirtualInstall', 'VirtualModConfig.xml'))
       .then(res => {
-        this.nextState.canImport = res && !this.isNMMRunning();
+        this.nextState.nmmModsEnabled = !res;
+        this.nextState.nmmRunning = this.isNMMRunning();
         this.nextState.busy = false;
       }).then(() => validateLoop());
   }
