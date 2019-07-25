@@ -1069,14 +1069,15 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   private startImport() {
     const { gameId } = this.props;
     const { autoSortEnabled, modsToImport, selectedSource } = this.state;
+
+    if (autoSortEnabled) {
+      // We don't want the sorting functionality to kick off as the user
+      //  is removing plugins through NMM with Vortex open.
+      this.context.api.events.emit('autosort-plugins', false);
+    }
+
     const startImportProcess = (): Promise<void> => {
       this.mTrace = new TraceImport();
-
-      if (autoSortEnabled) {
-        // We don't want the sorting functionality to kick off as the user
-        //  is removing plugins through NMM with Vortex open.
-        this.context.api.events.emit('autosort-plugins', false);
-      }
       const modList = Object.keys(modsToImport).map(id => modsToImport[id]);
       const enabledMods = modList.filter(mod => this.isModEnabled(mod));
       const modsPath = selectedSource[2];
