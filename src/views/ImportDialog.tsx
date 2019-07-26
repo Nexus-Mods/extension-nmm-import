@@ -15,16 +15,13 @@ import {
 
 import * as path from 'path';
 import * as React from 'react';
-import { Alert, Button, MenuItem, ProgressBar, SplitButton, ListGroup, ListGroupItem } from 'react-bootstrap';
+import { Alert, Button, ListGroup, ListGroupItem, MenuItem,
+         ProgressBar, SplitButton } from 'react-bootstrap';
 import { withTranslation } from 'react-i18next';
 import { connect } from 'react-redux';
 import * as Redux from 'redux';
 import { ComponentEx, EmptyPlaceholder, fs, Icon, ITableRowAction, log, Modal,
          selectors, Spinner, Steps, Table, Toggle, tooltip, types, util } from 'vortex-api';
-
-import { app, remote } from 'electron';
-const appUni = app || remote.app;
-const IMAGES_FOLDER = path.join(appUni.getAppPath(), 'assets', 'images');
 
 import * as Promise from 'bluebird';
 
