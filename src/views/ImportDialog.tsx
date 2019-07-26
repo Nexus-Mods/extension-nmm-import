@@ -623,7 +623,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
                   + 'tried to manage the same mods.')}
                 {t('You don\'t have to uninstall the mods, just disable them.')}
               </p>
-              <img src={`file://${IMAGES_FOLDER}/disablenmm.png`} />
+              <img src={`file://${__dirname}/disablenmm.png`} />
             </ListGroupItem>
            ) : null}
            {nmmRunning ? (
