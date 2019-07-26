@@ -108,6 +108,7 @@ function importArchives(api: types.IExtensionApi,
       const archiveIds = Object.keys(downloads);
       const filtered = archiveIds.filter(id => downloads[id].localPath === mod.modFilename);
       filtered.forEach(id => {
+        mod.archiveId = id;
         store.dispatch(actions.removeDownload(id));
       });
       return Promise.resolve();
