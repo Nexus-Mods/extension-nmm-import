@@ -38,7 +38,8 @@ export function isConfigEmpty(configFilePath: string): Promise<boolean> {
       return ((modInfoList === undefined) || (modInfoList.length === 0))
         ? Promise.resolve(true)
         : Promise.resolve(false);
-    });
+    })
+    .catch(err => Promise.resolve(true));
 }
 
 export function parseNMMConfigFile(nmmFilePath: string, mods: IModMap): Promise<IModEntry[]> {
