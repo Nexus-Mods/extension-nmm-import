@@ -1,8 +1,8 @@
-import { transferArchive, transferUnpackedMod} from './modFileImport';
+import { transferArchive } from './modFileImport';
 
 import {IModEntry} from '../types/nmmEntries';
 import TraceImport from './TraceImport';
-import { addMods} from './vortexImports';
+import { addMetaData} from './vortexImports';
 
 import * as Promise from 'bluebird';
 import * as path from 'path';
@@ -56,20 +56,15 @@ function enhance(sourcePath: string, input: IModEntry,
     .catch(err => input);
 }
 
-function importMods(api: types.IExtensionApi,
-                    trace: TraceImport,
-                    sourcePath: string,
-                    alternateSourcePath: string,
-                    modsPath: string,
-                    mods: IModEntry[],
-                    transferArchives: boolean,
-                    categories: { [id: string]: string },
-                    progress: (mod: string, idx: number) => void): Promise<string[]> {
+function importArchives(api: types.IExtensionApi,
+                        gameId: string,
+                        trace: TraceImport,
+                        modsPath: string,
+                        mods: IModEntry[],
+                        categories: { [id: string]: string },
+                        progress: (mod: string, idx: number) => void): Promise<string[]> {
   const store = api.store;
   const state: types.IState = store.getState();
-
-  const gameId = selectors.activeGameId(state);
-
   const vortexCategories = state.persistent.categories[gameId];
 
   const makeVortexCategory = (name: string): string => {
@@ -97,7 +92,10 @@ function importMods(api: types.IExtensionApi,
 
   const errors: string[] = [];
 
-  const transferArchiveFile = (source: string, dest: string, mod: IModEntry, size: number): Promise<void> => {
+  const transferArchiveFile = (source: string,
+                               dest: string,
+                               mod: IModEntry,
+                               size: number): Promise<void> => {
     return transferArchive(source, dest).then(() => {
       const downloads = util.getSafe(state, ['persistent', 'downloads', 'files'], undefined);
       if (downloads === undefined) {
@@ -110,6 +108,7 @@ function importMods(api: types.IExtensionApi,
       const archiveIds = Object.keys(downloads);
       const filtered = archiveIds.filter(id => downloads[id].localPath === mod.modFilename);
       filtered.forEach(id => {
+        mod.archiveId = id;
         store.dispatch(actions.removeDownload(id));
       });
       return Promise.resolve();
@@ -123,41 +122,29 @@ function importMods(api: types.IExtensionApi,
 
   return trace.writeFile('parsedMods.json', JSON.stringify(mods))
     .then(() => {
-      const installedMods: IModEntry[] = [];
-      trace.log('info', 'transfer unpacked mods files');
-      const installPath = selectors.installPath(state);
+      const importedArchives: IModEntry[] = [];
+      trace.log('info', 'transfer archive files');
       const downloadPath = selectors.downloadPath(state);
       return Promise.map(mods, mod => enhance(modsPath, mod, categories, makeVortexCategory))
         .then(modsEx => Promise.mapSeries(modsEx, (mod, idx) => {
-          trace.log('info', 'transferring', JSON.stringify(mod, undefined, 2));
+          trace.log('info', 'transferring', JSON.stringify(mod.modFilename, undefined, 2));
           progress(mod.modName, idx);
-          return transferUnpackedMod(mod, sourcePath, alternateSourcePath, installPath, true)
-            .then(transferResult => {
-              if (transferResult.hasTransferredFiles) {
-                installedMods.push(mod);
-              }
-              if (transferResult.errors.length > 0) {
-                trace.log('error', 'Failed to import', transferResult.errors);
-                errors.push(mod.modName);
-              }
-              if (transferArchives) {
-                const archivePath = path.join(mod.archivePath, mod.modFilename);
-                return fs.statAsync(archivePath)
-                  .then(stats => transferArchiveFile(archivePath, downloadPath, mod, stats.size))
-                  .catch(err => {
-                      trace.log('error', 'Failed to import mod archive',
-                                archivePath + ' - ' + err.message);
-                      errors.push(mod.modFilename);
-                  });
-              }
+          const archivePath = path.join(mod.archivePath, mod.modFilename);
+          return fs.statAsync(archivePath)
+            .then(stats => transferArchiveFile(archivePath, downloadPath, mod, stats.size))
+            .tap(() => importedArchives.push(mod))
+            .catch(err => {
+                trace.log('error', 'Failed to import mod archive',
+                          archivePath + ' - ' + err.message);
+                errors.push(mod.modFilename);
             });
         })
-          .then(() => {
-            trace.log('info', 'Finished transferring unpacked mod files');
-            if (installedMods.length > 0) {
-              addMods(gameId, installedMods, api);
-            }
-          }));
+        .then(() => {
+          trace.log('info', 'Finished transferring mod archives');
+          if (importedArchives.length > 0) {
+            addMetaData(gameId, importedArchives, api);
+          }
+        }));
     })
     .then(() => {
       trace.finish();
@@ -165,4 +152,4 @@ function importMods(api: types.IExtensionApi,
     });
 }
 
-export default importMods;
+export default importArchives;

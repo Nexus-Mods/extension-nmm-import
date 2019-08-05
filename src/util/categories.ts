@@ -10,7 +10,12 @@ function parseCategories(data: string): { [id: string]: string } {
   const items = [...Array(categories.length).keys()].map(i => categories.item(i));
 
   return items.reduce((prev: { [id: string]: string }, item) => {
-    prev[item.getAttribute('ID')] = item.getElementsByTagName('name')[0].textContent;
+    const categoryName = item.getElementsByTagName('name')[0].textContent;
+    if (categoryName !== 'Unassigned') {
+      // Ignore the "Unassigned" category.
+      prev[item.getAttribute('ID')] = categoryName;
+    }
+
     return prev;
   }, {});
 }

@@ -2,8 +2,7 @@ import { IModEntry } from './types/nmmEntries';
 
 import * as I18next from 'i18next';
 import * as React from 'react';
-import { TableNumericFilter,
-  TableTextFilter, tooltip, types } from 'vortex-api';
+import { TableTextFilter, tooltip, types } from 'vortex-api';
 
 export const MOD_ID: types.ITableAttribute = {
   id: 'id',
@@ -64,32 +63,16 @@ export const FILENAME: types.ITableAttribute = {
   edit: {},
 };
 
-export const FILES: types.ITableAttribute = {
-  id: 'files',
-  name: 'Mod Files',
-  description: 'The number of files installed by this mod',
-  icon: 'level-up',
-  calc: (mod: IModEntry) => mod.fileEntries.length,
-  placement: 'detail',
-  isToggleable: true,
-  isSortable: true,
-  filter: new TableNumericFilter(),
-  sortFunc: (lhs: number, rhs: number): number => {
-    return (rhs - lhs);
-  },
-  edit: {},
-};
-
 export const LOCAL: types.ITableAttribute<IModEntry> = {
   id: 'local',
   name: 'Duplicate',
-  description: 'Whether the mod is already managed by Vortex',
+  description: 'Whether the mod/archive is already managed by Vortex',
   icon: 'level-up',
   customRenderer: (mod: IModEntry, detail: boolean, t: I18next.TranslationFunction) => {
     return mod.isAlreadyManaged ? (
       <tooltip.Icon
         id={`import-duplicate-${mod.nexusId}`}
-        tooltip={t('This mod is already managed by Vortex')}
+        tooltip={t('This archive is already managed by Vortex')}
         name='feedback-warning'
       />
    ) : null;
