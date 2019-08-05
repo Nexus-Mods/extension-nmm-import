@@ -918,6 +918,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private populateModsTable(progress: (mod: string) => void): Promise<{[id: string]: IModEntry}> {
+    const { t } = this.props;
     const { selectedSource, parsedMods } = this.state;
     const mods: {[id: string]: IModEntry} = {...parsedMods};
     const state = this.context.api.store.getState();
@@ -936,7 +937,18 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
             mods[mod.modFilename] = mod;
             return Promise.resolve();
           });
-      }).then(() => mods));
+      })
+      .then(() => mods))
+      .catch(err => {
+        log('error', 'Failed to create mod entry', err);
+        const errorMessage = (err.code === 'EPERM')
+          ? t('"{{permFile}}" is access protected. Please ensure your account has '
+            + 'full read/write permissions to your game\'s NMM mods folder and try again.',
+            { replace: { permFile: err.path } })
+          : err.message;
+        this.nextState.error = errorMessage;
+        return Promise.resolve({});
+      });
   }
 
   private fileChecksum(filePath: string): Promise<string> {
