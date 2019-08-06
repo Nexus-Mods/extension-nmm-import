@@ -895,6 +895,41 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       });
   }
 
+  private testAccess(): Promise<void> {
+    // Technically we only need read access, we're going to
+    //  run the MD5 hash generation logic on a random archive
+    //  as that requires Vortex to open the file and that's as
+    //  invasive as the import tool can get.
+    //
+    // If this fails, there's no point to continue the import
+    //  process as it would just fail later down the line.
+    const { t } = this.props;
+    const { selectedSource } = this.state;
+    if (selectedSource === undefined) {
+      // How did we even get here ?
+      return Promise.resolve();
+    }
+
+    return fs.readdirAsync(selectedSource[2])
+      .then(dirElements => {
+        const element = dirElements.find(filePath => archiveExtLookup.has(path.extname(filePath)));
+        return (element === undefined)
+          ? Promise.resolve()
+          : this.fileChecksum(path.join(selectedSource[2], element))
+              .then(() => Promise.resolve())
+              .catch(err => {
+                log('error', 'Failed to generate MD5 hash', err);
+                return (err.code !== 'EPERM')
+                  ? Promise.reject(err)
+                  : Promise.reject(new Error(t('Vortex is unable to read/open one or more of '
+                    + 'your archives - please ensure you have full permissions to those files, and '
+                    + 'that NMM is not running in the background before trying again. '
+                    + 'Additionally, now would be a good time to add an exception for Vortex to '
+                    + 'your Anti-Virus software (if you have one)')));
+              });
+      });
+  }
+
   private setup() {
     const { gameId } = this.props;
     const virtualPath =
@@ -902,7 +937,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     const state: types.IState = this.context.api.store.getState();
     const mods = state.persistent.mods[gameId] || {};
 
-    return parseNMMConfigFile(virtualPath, mods)
+    return this.testAccess()
+      .then(() => parseNMMConfigFile(virtualPath, mods))
       .catch(ParseError, () => Promise.resolve([]))
       .then((modEntries: IModEntry[]) => {
         this.nextState.parsedMods = modEntries.reduce((prev, value) => {
