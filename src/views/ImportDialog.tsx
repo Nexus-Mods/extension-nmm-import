@@ -1155,7 +1155,17 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         this.context.api.events.emit('autosort-plugins', true);
       }
 
-      this.mTrace = new TraceImport();
+      try {
+        this.mTrace = new TraceImport();
+      } catch (err) {
+        if (err.code === 'EEXIST') {
+          return Promise.delay(1000).then(() => startImportProcess());
+        } else {
+          this.context.api.showErrorNotification(
+            'Failed to initialize trace log for NMM import', err);
+          return Promise.resolve();
+        }
+      }
       const modList = Object.keys(modsToImport).map(id => modsToImport[id]);
       const enabledMods = modList.filter(mod => this.isModEnabled(mod));
       const modsPath = selectedSource[2];
