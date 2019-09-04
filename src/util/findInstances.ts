@@ -12,7 +12,7 @@ function convertGameId(input: string): string {
   return input.replace(/(?:^|\s)\S/g, (a) => a.toUpperCase());
 }
 
-function getVirtualFolder(userConfig: string, gameId: string): string[] {
+function getVirtualFolder(userConfig: string, gameId: string): Promise<string[]> {
   const parser = new DOMParser();
 
   const xmlDoc = parser.parseFromString(userConfig, 'text/xml');
@@ -43,8 +43,14 @@ function getVirtualFolder(userConfig: string, gameId: string): string[] {
 
   const modsPath = item.textContent;
 
-  const setting = [ virtualPath, nmmLinkPath, modsPath ];
-  return setting;
+  const setting = [ virtualPath, nmmLinkPath, modsPath, '0' ];
+  return fs.statAsync(modsPath)
+    .then(stats => Promise.resolve([
+      virtualPath,
+      nmmLinkPath,
+      modsPath,
+      stats.birthtimeMs.toString()]))
+    .catch(err => Promise.resolve(setting));
 }
 
 function findInstances(gameId: string): Promise<string[][]> {
@@ -64,7 +70,21 @@ function findInstances(gameId: string): Promise<string[][]> {
       const set = result.reduce((prev: { [key: string]: string[] }, value: string[][]) => {
         value.forEach(val => {
           if (val !== undefined) {
-            prev[val[0].toUpperCase()] = val;
+            if (prev[val[0].toUpperCase()] !== undefined) {
+              // We found a duplicate entry.. Now we're faced with a problem:
+              //  which of these instances is the currently active one ?
+              //  - if they're both pointing to the same mods folder, then we're fine.
+              //  - if they have different mods folder, we check its creation time -
+              //  most recent mods folder MUST be the active one... right?
+              const existingVal = prev[val[0].toUpperCase()];
+              if ((existingVal[2] !== val[2])
+                && (parseInt(existingVal[3], 10) < parseInt(val[3], 10))) {
+                prev[val[0].toUpperCase()] = val;
+              }
+            } else {
+              // Easy - no duplicates.
+              prev[val[0].toUpperCase()] = val;
+            }
           }
         });
         return prev;
