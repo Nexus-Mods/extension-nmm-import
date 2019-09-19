@@ -27,7 +27,13 @@ class TraceImport {
         return fs.copyAsync(
           path.join(importPath, 'VirtualInstall', 'VirtualModConfig.xml'),
           path.join(this.mPath, 'VirtualModConfig.xml'));
-      });
+      })
+      .catch(err => (err.code === 'ENOENT')
+        // No virtual mod config.. We know this tends to happen on some
+        //  configurations - resolve and keep going.
+        //  (oh the hacks we need to put in to support that PoS manager)
+        ? Promise.resolve()
+        : Promise.reject(err));
   }
 
   public finish() {
