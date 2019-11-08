@@ -955,7 +955,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private populateModsTable(progress: (mod: string) => void): Promise<{[id: string]: IModEntry}> {
     const { t } = this.props;
-    const { selectedSource, parsedMods } = this.state;
+    const { selectedSource, parsedMods } = this.nextState;
     const mods: {[id: string]: IModEntry} = {...parsedMods};
     const state = this.context.api.store.getState();
     let existingDownloads: Set<string>;
@@ -1087,7 +1087,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 }
 
   private getArchives() {
-    const { selectedSource, parsedMods } = this.state;
+    const { selectedSource, parsedMods } = this.nextState;
     const knownArchiveExt = (filePath: string): boolean => (!!filePath)
       ? archiveExtLookup.has(path.extname(filePath).toLowerCase())
       : false;
