@@ -1,4 +1,4 @@
-import * as Promise from 'bluebird';
+import Promise from 'bluebird';
 import { fs } from 'vortex-api';
 
 function parseCategories(data: string): { [id: string]: string } {

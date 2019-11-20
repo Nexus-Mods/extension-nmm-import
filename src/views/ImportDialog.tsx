@@ -23,7 +23,7 @@ import * as Redux from 'redux';
 import { ComponentEx, EmptyPlaceholder, fs, Icon, ITableRowAction, log, Modal,
          selectors, Spinner, Steps, Table, Toggle, tooltip, types, util } from 'vortex-api';
 
-import * as Promise from 'bluebird';
+import Promise from 'bluebird';
 
 import { createHash } from 'crypto';
 

@@ -1,6 +1,6 @@
 import { IModEntry } from '../types/nmmEntries';
 
-import * as Promise from 'bluebird';
+import Promise from 'bluebird';
 import { actions, types, util } from 'vortex-api';
 
 export function addMetaData(gameID: string, modEntries: IModEntry[],
