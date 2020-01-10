@@ -1086,7 +1086,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     }));
 }
 
-  private getArchives() {
+  private getArchives(): Promise<string[]> {
     const { selectedSource, parsedMods } = this.nextState;
     const knownArchiveExt = (filePath: string): boolean => (!!filePath)
       ? archiveExtLookup.has(path.extname(filePath).toLowerCase())
@@ -1097,9 +1097,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       .map(key => parsedMods[key].modFilename));
 
     return fs.readdirAsync(selectedSource[2])
-      .filter(filePath => knownArchiveExt(filePath))
-      .then(archives => archives.filter(archive => !modFileNames.has(archive)))
-      .catch(err => {
+      .filter((filePath: string) => knownArchiveExt(filePath))
+      .then((archives: string[]) => archives.filter(archive => !modFileNames.has(archive)))
+      .catch((err: Error) => {
         this.nextState.error = err.message;
         return [];
       });
