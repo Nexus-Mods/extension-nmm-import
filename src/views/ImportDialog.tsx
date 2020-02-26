@@ -188,7 +188,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     };
   }
 
-  public componentWillReceiveProps(newProps: IProps) {
+  public UNSAFE_componentWillReceiveProps(newProps: IProps) {
     if (this.props.importStep !== newProps.importStep) {
       if (newProps.importStep === 'start') {
         this.resetStateData();
