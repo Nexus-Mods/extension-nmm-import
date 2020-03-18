@@ -1219,7 +1219,7 @@ function mapStateToProps(state: any): IConnectedProps {
 
   return {
     gameId,
-    importStep: state.session.modimport.importStep,
+    importStep: state.session.modimport.importStep || undefined,
     downloadPath: selectors.downloadPath(state),
     installPath: gameId !== undefined ? selectors.installPathForGame(state, gameId) : undefined,
   };
