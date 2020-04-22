@@ -23,7 +23,7 @@ import * as Redux from 'redux';
 import { ComponentEx, EmptyPlaceholder, fs, Icon, ITableRowAction, log, Modal,
          selectors, Spinner, Steps, Table, Toggle, tooltip, types, util } from 'vortex-api';
 
-import * as Promise from 'bluebird';
+import Promise from 'bluebird';
 
 import { createHash } from 'crypto';
 
@@ -188,7 +188,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     };
   }
 
-  public componentWillReceiveProps(newProps: IProps) {
+  public UNSAFE_componentWillReceiveProps(newProps: IProps) {
     if (this.props.importStep !== newProps.importStep) {
       if (newProps.importStep === 'start') {
         this.resetStateData();
@@ -1086,7 +1086,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     }));
 }
 
-  private getArchives() {
+  private getArchives(): Promise<string[]> {
     const { selectedSource, parsedMods } = this.nextState;
     const knownArchiveExt = (filePath: string): boolean => (!!filePath)
       ? archiveExtLookup.has(path.extname(filePath).toLowerCase())
@@ -1097,9 +1097,9 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       .map(key => parsedMods[key].modFilename));
 
     return fs.readdirAsync(selectedSource[2])
-      .filter(filePath => knownArchiveExt(filePath))
-      .then(archives => archives.filter(archive => !modFileNames.has(archive)))
-      .catch(err => {
+      .filter((filePath: string) => knownArchiveExt(filePath))
+      .then((archives: string[]) => archives.filter(archive => !modFileNames.has(archive)))
+      .catch((err: Error) => {
         this.nextState.error = err.message;
         return [];
       });

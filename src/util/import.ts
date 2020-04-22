@@ -4,7 +4,7 @@ import {IModEntry} from '../types/nmmEntries';
 import TraceImport from './TraceImport';
 import { addMetaData} from './vortexImports';
 
-import * as Promise from 'bluebird';
+import Promise from 'bluebird';
 import * as path from 'path';
 import { generate as shortid } from 'shortid';
 import { actions, fs, selectors, types, util } from 'vortex-api';
