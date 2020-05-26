@@ -23,6 +23,23 @@ function nmmConfigExists(): boolean {
   }
 }
 
+const isGameSupported = (context: types.IExtensionContext): boolean => {
+  const state = context.api.store.getState();
+  const gameId: string = selectors.activeGameId(state);
+  return ([
+    'skyrim', 'skyrimse',  'skyrimvr',
+    'morrowind', 'oblivion', 'fallout3',
+    'newvegas', 'fallout4', 'fallout4vr',
+    'enderal', 'monsterhunterworld', 'witcher2',
+    'witcher3', 'xrebirth', 'xcom2', 
+    'worldoftanks', 'warthunder', 'teso',
+    'stateofdecay', 'starbound', 'legendsofgrimrock',
+    'dragonsdogma', 'dragonage', 'dragonage2',
+    'darksouls', 'darksouls2', 'breakingwheel',
+    'nomanssky'
+  ].indexOf(gameId) !== -1);
+};
+
 function init(context: types.IExtensionContext): boolean {
   if (process.platform !== 'win32') {
     // not going to work on other platforms because some of the path resolution
@@ -39,7 +56,7 @@ function init(context: types.IExtensionContext): boolean {
   context.registerReducer(['session', 'modimport'], sessionReducer);
   context.registerAction('mod-icons', 115, 'import', {}, 'Import From NMM', () => {
     context.api.store.dispatch(setImportStep('start'));
-  });
+  }, () => isGameSupported(context));
 
   context.registerToDo('import-nmm', 'search', () => ({}), 'import', 'Import from NMM', () => {
     context.api.store.dispatch(setImportStep('start'));
