@@ -1101,7 +1101,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       .then((archives: string[]) => archives.filter(archive => !modFileNames.has(archive)))
       .catch((err: Error) => {
         this.nextState.error = err.message;
-        return [];
+        return Promise.resolve([]);
       });
   }
 

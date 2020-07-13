@@ -21,7 +21,7 @@ function getVirtualFolder(userConfig: string, gameId: string): Promise<string[]>
     .querySelector(`setting[name="VirtualFolder"] item[modeId="${convertGameId(gameId)}" i] string`);
 
   if (item === null) {
-    return undefined;
+    return Promise.resolve(undefined);
   }
 
   const virtualPath = item.textContent;
@@ -38,7 +38,7 @@ function getVirtualFolder(userConfig: string, gameId: string): Promise<string[]>
   .querySelector(`setting[name="ModFolder"] item[modeId="${convertGameId(gameId)}" i] string`);
 
   if (item === null) {
-    return undefined;
+    return Promise.resolve(undefined);
   }
 
   const modsPath = item.textContent;
