@@ -324,9 +324,11 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private onStartUp(): Promise<void> {
+    const { selectedSource } = this.state;
     const { parsedMods } = this.nextState;
-    if (parsedMods === undefined) {
-      // happens if there are no NMM mods for this game
+    if (selectedSource === undefined || parsedMods === undefined) {
+      // happens if there are no NMM mods for this game, or if we were
+      //  unable to find source instances.
       return Promise.resolve();
     }
 
@@ -955,7 +957,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 
   private populateModsTable(progress: (mod: string) => void): Promise<{[id: string]: IModEntry}> {
     const { t } = this.props;
-    const { selectedSource, parsedMods } = this.nextState;
+    const { selectedSource } = this.state;
+    const { parsedMods } = this.nextState;
     const mods: {[id: string]: IModEntry} = {...parsedMods};
     const state = this.context.api.store.getState();
     let existingDownloads: Set<string>;
@@ -1087,7 +1090,11 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
 }
 
   private getArchives(): Promise<string[]> {
-    const { selectedSource, parsedMods } = this.nextState;
+    // At this point we have most certainly confirmed that this.state.selectedSource
+    //  exists. We don't query this.nextState.selectedSource as it _can_ be undefined
+    //  https://github.com/Nexus-Mods/Vortex/issues/6923
+    const { selectedSource } = this.state;
+    const { parsedMods } = this.nextState;
     const knownArchiveExt = (filePath: string): boolean => (!!filePath)
       ? archiveExtLookup.has(path.extname(filePath).toLowerCase())
       : false;
