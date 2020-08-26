@@ -20,6 +20,7 @@ import { Alert, Button, ListGroup, ListGroupItem, MenuItem,
 import { withTranslation } from 'react-i18next';
 import { connect } from 'react-redux';
 import * as Redux from 'redux';
+import { ThunkDispatch } from 'redux-thunk';
 import { ComponentEx, EmptyPlaceholder, fs, Icon, ITableRowAction, log, Modal,
          selectors, Spinner, Steps, Table, Toggle, tooltip, types, util } from 'vortex-api';
 
@@ -1232,7 +1233,7 @@ function mapStateToProps(state: any): IConnectedProps {
   };
 }
 
-function mapDispatchToProps(dispatch: Redux.Dispatch<any>): IActionProps {
+function mapDispatchToProps(dispatch: ThunkDispatch<any, null, Redux.Action>): IActionProps {
   return {
     onSetStep: (step?: Step) => dispatch(setImportStep(step)),
   };
