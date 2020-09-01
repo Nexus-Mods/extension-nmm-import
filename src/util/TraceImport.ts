@@ -20,7 +20,7 @@ class TraceImport {
   }
 
   public initDirectory(importPath: string): Promise<void> {
-    return fs.mkdirAsync(this.mPath)
+    return fs.ensureDirAsync(this.mPath)
       .then(() => fs.createWriteStream(this.logFilePath))
       .then(stream => {
         this.mLogFile = stream;
