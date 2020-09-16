@@ -29,14 +29,14 @@ const isGameSupported = (context: types.IExtensionContext): boolean => {
   return ([
     'skyrim', 'skyrimse',  'skyrimvr',
     'morrowind', 'oblivion', 'fallout3',
-    'newvegas', 'fallout4', 'fallout4vr',
+    'falloutnv', 'fallout4', 'fallout4vr',
     'enderal', 'monsterhunterworld', 'witcher2',
-    'witcher3', 'xrebirth', 'xcom2', 
+    'witcher3', 'xrebirth', 'xcom2',
     'worldoftanks', 'warthunder', 'teso',
     'stateofdecay', 'starbound', 'legendsofgrimrock',
     'dragonsdogma', 'dragonage', 'dragonage2',
     'darksouls', 'darksouls2', 'breakingwheel',
-    'nomanssky'
+    'nomanssky',
   ].indexOf(gameId) !== -1);
 };
 
