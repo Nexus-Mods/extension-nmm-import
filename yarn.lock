@@ -45,6 +45,11 @@
   version "8.5.7"
   resolved "https://registry.yarnpkg.com/@types/node/-/node-8.5.7.tgz#9c498c35af354dcfbca3790fb2e81129e93cf0e2"
 
+"@types/node@^12.12.35":
+  version "12.19.15"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-12.19.15.tgz#0de7e978fb43db62da369db18ea088a63673c182"
+  integrity sha512-lowukE3GUI+VSYSu6VcBXl14d61Rp5hA1D+61r16qnwC0lYNSqdxcvRh0pswejorHfS+HgwBasM8jLXz0/aOsw==
+
 "@types/prop-types@*":
   version "15.7.3"
   resolved "https://registry.yarnpkg.com/@types/prop-types/-/prop-types-15.7.3.tgz#2ab0d5da2e5815f94b0b9d4b95d1e5f243ab2ca7"
@@ -3598,7 +3603,7 @@ winapi-bindings@Nexus-Mods/node-winapi-bindings:
   dependencies:
     autogypi "^0.2.2"
     nan "^2.14.0"
-    node-gyp "^6.0.0"
+    node-gyp "^5.0.0"
 
 worker-farm@^1.7.0:
   version "1.7.0"

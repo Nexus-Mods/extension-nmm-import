@@ -21,6 +21,7 @@ import { withTranslation } from 'react-i18next';
 import { connect } from 'react-redux';
 import * as Redux from 'redux';
 import { ThunkDispatch } from 'redux-thunk';
+import { pathToFileURL } from 'url';
 import { ComponentEx, EmptyPlaceholder, fs, Icon, ITableRowAction, log, Modal,
          selectors, Spinner, Steps, Table, Toggle, tooltip, types, util } from 'vortex-api';
 
@@ -623,7 +624,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
                   + 'tried to manage the same mods.')}
                 {t('You don\'t have to uninstall the mods, just disable them.')}
               </p>
-              <img src={`file://${__dirname}/disablenmm.png`} />
+              <img src={pathToFileURL(path.join(__dirname, 'disablenmm.png')).href} />
             </ListGroupItem>
            ) : null}
            {nmmRunning ? (

@@ -63,7 +63,7 @@ function findInstances(gameId: string): Promise<string[][]> {
         .then((versions: string[]) =>
           Promise.map(versions, version =>
             fs.readFileAsync(path.join(base, instance, version, 'user.config'))
-              .then((data: NodeBuffer) =>
+              .then((data: Buffer) =>
                 getVirtualFolder(data.toString(), gameId))))))
     .then(result => {
       // remove duplicates, in a case-insensitive way, remove undefined
