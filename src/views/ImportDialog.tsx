@@ -884,7 +884,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     } catch (err) {
       this.context.api.showErrorNotification('Unable to start import process', err, {
         // don't allow report on "not found" and permission errors
-        allowReport: [2, 3, 5].indexOf(err.errno) === -1,
+        allowReport: [2, 3, 5].indexOf(err.systemCode) === -1,
       });
       this.cancel();
     }
