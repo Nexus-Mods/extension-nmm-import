@@ -47,13 +47,14 @@ function init(context: types.IExtensionContext): boolean {
     return false;
   }
 
+  context.registerReducer(['session', 'modimport'], sessionReducer);
+
   const gameModeActive = (store) => selectors.activeGameId(store.getState()) !== undefined 
     ? true
     : false;
 
   context.registerDialog('nmm-import', ImportDialog);
 
-  context.registerReducer(['session', 'modimport'], sessionReducer);
   context.registerAction('mod-icons', 115, 'import', {}, 'Import From NMM', () => {
     context.api.store.dispatch(setImportStep('start'));
   }, () => isGameSupported(context));
