@@ -714,7 +714,8 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
     if (progress === undefined) {
       return null;
     }
-    const perc = Math.floor((progress.pos * 100) / Object.keys(modsToImport).length);
+    const enabledMods = Object.keys(modsToImport).filter(id => this.isModEnabled(modsToImport[id]));
+    const perc = Math.floor((progress.pos * 100) / enabledMods.length);
     return (
       <div className='import-working-container'>
         <EmptyPlaceholder
