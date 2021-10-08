@@ -1,7 +1,6 @@
 import Promise from 'bluebird';
-import { remote } from 'electron';
 import * as path from 'path';
-import { fs } from 'vortex-api';
+import { fs, util } from 'vortex-api';
 
 function convertGameId(input: string): string {
   if (input === 'skyrimse') {
@@ -54,7 +53,7 @@ function getVirtualFolder(userConfig: string, gameId: string): Promise<string[]>
 }
 
 function findInstances(gameId: string): Promise<string[][]> {
-  const base = path.resolve(remote.app.getPath('appData'), '..', 'local', 'Black_Tree_Gaming');
+  const base = path.resolve(util.getVortexPath('appData'), '..', 'local', 'Black_Tree_Gaming');
   return fs.readdirAsync(base)
     .filter((fileName: string) => fs.statAsync(path.join(base, fileName))
                                       .then(stat => stat.isDirectory()))

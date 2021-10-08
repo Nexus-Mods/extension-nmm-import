@@ -1,9 +1,8 @@
 import Promise from 'bluebird';
-import { remote } from 'electron';
 import * as os from 'os';
 import * as path from 'path';
 import { inspect } from 'util';
-import { fs } from 'vortex-api';
+import { fs, util } from 'vortex-api';
 
 class TraceImport {
   private mPath: string;
@@ -12,7 +11,7 @@ class TraceImport {
   constructor() {
     const now = new Date();
     const name = `nmm_import-${now.getTime()}`;
-    this.mPath = path.join(remote.app.getPath('userData'), name);
+    this.mPath = path.join(util.getVortexPath('userData'), name);
   }
 
   public get logFilePath(): string {

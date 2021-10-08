@@ -2,18 +2,15 @@ import { setImportStep } from './actions/session';
 import { sessionReducer } from './reducers/session';
 import ImportDialog from './views/ImportDialog';
 
-import { app as appIn, remote } from 'electron';
 import * as path from 'path';
-import { fs, selectors, types } from 'vortex-api';
-
-const app = appIn !== undefined ? appIn : remote.app;
+import { fs, selectors, types, util } from 'vortex-api';
 
 let appPath: string;
 
 function nmmConfigExists(): boolean {
   try {
     if (appPath === undefined) {
-      appPath = app.getPath('appData');
+      appPath = util.getVortexPath('appData');
     }
     const base = path.resolve(appPath, '..', 'local', 'Black_Tree_Gaming');
     fs.statSync(base);
