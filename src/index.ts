@@ -58,6 +58,7 @@ function init(context: types.IExtensionContext): boolean {
 
   context.registerToDo('import-nmm', 'search', () => ({}), 'import', 'Import from NMM', () => {
     context.api.store.dispatch(setImportStep('start'));
+    context.api.events.emit('analytics-track-click-event', 'Dashboard', 'NMM Import');
   }, () => nmmConfigExists() && gameModeActive(context.api.store),  '', 100);
 
   context.once(() => {
