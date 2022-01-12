@@ -11,7 +11,7 @@ export const sessionReducer: types.IReducerSpec = {
       util.setSafe(state, ['importStep'], payload),
     [actions.selectImportFolder as any]: (state, payload) => {
       const importFolder = payload;
-      util.setSafe(state, ['selectFolder'], importFolder);
+      return util.setSafe(state, ['selectFolder'], importFolder);
     },
   },
   defaults: {
