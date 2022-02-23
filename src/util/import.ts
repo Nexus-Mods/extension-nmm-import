@@ -53,7 +53,10 @@ function enhance(sourcePath: string, input: IModEntry,
         customName,
       };
     })
-    .catch(err => input);
+    .catch(err => ({
+      ...input,
+      archiveId: shortid(),
+    }));
 }
 
 function importArchives(api: types.IExtensionApi,
