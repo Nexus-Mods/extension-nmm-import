@@ -389,7 +389,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   //  an array containing successfully imported archives.
   private getSuccessfullyImported(): IModEntry[] {
     const { failedImports, modsToImport } = this.state;
-    const enabledMods = Object.keys(modsToImport)
+    const enabledMods = Object.keys(modsToImport ?? [])
       .map(id => modsToImport[id])
       .filter(mod => this.isModEnabled(mod));
 
