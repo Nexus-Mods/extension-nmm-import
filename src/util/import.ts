@@ -146,7 +146,7 @@ function importArchives(api: types.IExtensionApi,
           trace.log('info', 'Finished transferring mod archives');
           if (importedArchives.length > 0) {
             addMetaData(gameId, importedArchives, api);
-            api.events.emit('did-import-downloads', [importedArchives.map(arch => arch.archiveId)]);
+            api.events.emit('did-import-downloads', importedArchives.map(arch => arch.archiveId));
           }
         }));
     })
