@@ -47,7 +47,7 @@ export function parseNMMConfigFile(nmmFilePath: string, mods: IModMap): Promise<
     .then(data => parseModEntries(data.toString('utf-8'), mods)
       .then(modEntries => modEntries.filter(entry => entry !== undefined)))
     .catch(err => Promise.reject(new ParseError(
-            'The selected folder does not contain a VirtualModConfig.xml file.')));
+      'The selected folder does not contain a VirtualModConfig.xml file.')));
 }
 
 // exported so it can be unit-tested (ugh)
@@ -59,7 +59,7 @@ export function parseModEntries(xmlData: string, mods: IModMap): Promise<IModEnt
     .then(modInfoList => {
       if ((modInfoList === undefined) || (modInfoList.length <= 0)) {
         return Promise.reject(new ParseError(
-            'The selected folder contains an empty VirtualModConfig.xml file.'));
+          'The selected folder contains an empty VirtualModConfig.xml file.'));
       }
 
       return Promise.map(Array.from(modInfoList), (modInfo: Element): Promise<IModEntry> => {

@@ -23,6 +23,13 @@ export interface IFileEntry {
   filePriority: number;
 }
 
+export interface ICapacityInfo {
+  rootPath: string;
+  totalFreeBytes: number;
+  totalNeededBytes?: number;
+  hasCalculationErrors?: boolean;
+}
+
 export function ParseError(message) {
   this.message = message;
   Error.captureStackTrace(this, ParseError);

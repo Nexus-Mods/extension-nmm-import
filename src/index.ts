@@ -50,7 +50,8 @@ function init(context: types.IExtensionContext): boolean {
     ? true
     : false;
 
-  context.registerDialog('nmm-import', ImportDialog);
+  context.registerDialog('nmm-import', ImportDialog, () => ({
+  }));
 
   context.registerAction('mod-icons', 115, 'import', {}, 'Import From NMM', () => {
     context.api.store.dispatch(setImportStep('start'));
