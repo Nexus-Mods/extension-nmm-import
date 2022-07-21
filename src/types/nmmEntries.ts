@@ -23,12 +23,8 @@ export interface IFileEntry {
   filePriority: number;
 }
 
-export interface ICapacityInfo {
-  rootPath: string;
-  totalFreeBytes: number;
-  totalNeededBytes?: number;
-  hasCalculationErrors?: boolean;
-}
+export type ModsMap = { [modId: string]: IModEntry };
+export type ProgressCB = (err: Error, mod: string) => void;
 
 export function ParseError(message) {
   this.message = message;

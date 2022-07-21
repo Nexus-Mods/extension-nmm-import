@@ -1,6 +1,7 @@
 import { setImportStep } from '../actions/session';
 
-import { ICapacityInfo, IModEntry, ParseError } from '../types/nmmEntries';
+import { ModsCapacityMap, ICapacityInfo } from '../types/capacityTypes';
+import { IModEntry, ModsMap, ParseError, ProgressCB } from '../types/nmmEntries';
 import { getCategories } from '../util/categories';
 import findInstances from '../util/findInstances';
 import importArchives from '../util/import';
@@ -30,15 +31,14 @@ import {
 import Promise from 'bluebird';
 
 import {
-  calculateArchiveSize,
-  createModEntry,
-  getArchives,
+  calculateModsCapacity,
+  generateModEntries,
   getLocalAssetUrl,
   getCapacityInformation,
   getCategoriesFilePath,
   getVirtualConfigFilePath,
   testAccess,
-  validate
+  validate,
 } from '../util/util';
 
 type Step = 'start' | 'setup' | 'working' | 'review';
@@ -77,7 +77,7 @@ interface IComponentState {
 
   // Disk space calculation variables.
   capacityInformation: ICapacityInfo;
-  modsCapacity: { [id: string]: number };
+  modsCapacity: ModsCapacityMap;
 
   // Array of successfully imported mod entries.
   successfullyImported: IModEntry[];
@@ -163,12 +163,7 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
               : !(this.state.importEnabled[mod.modFilename] !== false)
             : value === 'yes';
           ++this.nextState.counter;
-          // Avoid calculating for mods that are already managed by Vortex.
-          if (!mod.isAlreadyManaged) {
-            this.recalculate();
-          } else {
-            return null;
-          }
+          this.recalculate();
         },
       },
     };
@@ -288,11 +283,11 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
   }
 
   private recalculate() {
-    const { capacityInformation, modsToImport } = this.nextState;
+    const { modsToImport } = this.state;
     const validCalcState = ((modsToImport !== undefined)
       && (Object.keys(modsToImport).length > 0));
-    capacityInformation.hasCalculationErrors = false;
-    capacityInformation.totalNeededBytes = validCalcState
+    this.nextState.capacityInformation.hasCalculationErrors = false;
+    this.nextState.capacityInformation.totalNeededBytes = validCalcState
       ? this.calcArchiveFiles()
       : 0;
   }
@@ -318,44 +313,30 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       return Promise.resolve();
     }
 
-    return this.populateModsTable((mod: string) => {
+    const progCB = (err: Error, mod: string) => {
+      if (err) {
+        this.nextState.capacityInformation.hasCalculationErrors = true;
+      }
       this.nextState.progress = { mod, pos: 0 };
-    }).then(mods => {
-      this.nextState.modsToImport = mods;
-      const modList = Object.keys(mods)
-        .map(id => mods[id]);
-
-      return this.calculateModsCapacity(modList, (mod: string) => {
-        this.nextState.progress = { mod, pos: 0 };
-      });
+    };
+    return this.populateModsTable(progCB)
+      .then(mods => {
+        this.nextState.modsToImport = mods;
+        const modList = Object.keys(mods)
+          .map(id => mods[id]);
+      return this.getModsCapacity(modList, progCB);
     });
   }
 
-  private calculateModsCapacity(modList: IModEntry[],
-    progress: (mod: string) => void): Promise<void> {
-    const { capacityInformation } = this.nextState;
-    const modCapacityInfo: { [id: string]: number } = {};
-    return Promise.mapSeries(modList, (mod, idx) => {
-      progress(mod.modFilename);
-      return calculateArchiveSize(mod)
-        .then(archiveSizeBytes => {
-          modCapacityInfo[mod.modFilename] = archiveSizeBytes;
-          return Promise.resolve();
-        })
-        .catch(() => {
-          capacityInformation.hasCalculationErrors = true;
-          modCapacityInfo[mod.modFilename] = 0;
-          return Promise.resolve();
-        });
-    })
-      .then(() => {
+  private getModsCapacity(modList: IModEntry[], cb: ProgressCB): Promise<void> {
+    return (calculateModsCapacity(modList, cb) as any)
+      .then((modCapacityInfo) => {
         this.nextState.modsCapacity = modCapacityInfo;
         this.recalculate();
-        return Promise.resolve();
       });
   }
 
-  private calcArchiveFiles() {
+  private calcArchiveFiles(): number {
     const { modsCapacity, modsToImport } = this.nextState;
     return Object.keys(modsCapacity)
       .filter(id => this.modWillBeEnabled(modsToImport[id]))
@@ -901,29 +882,11 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
       }).finally(() => this.onStartUp());
   }
 
-  private populateModsTable(progress: (mod: string) => void): Promise<{ [id: string]: IModEntry }> {
+  private populateModsTable(cb: ProgressCB): Promise<ModsMap> {
     const { t } = this.props;
-    const { selectedSource } = this.state;
-    const { parsedMods } = this.nextState;
-    const mods: { [id: string]: IModEntry } = { ...parsedMods };
-    const state = this.context.api.store.getState();
-    let existingDownloads: Set<string>;
-    const downloads = util.getSafe(state, ['persistent', 'downloads', 'files'], undefined);
-    if ((downloads !== undefined) && (Object.keys(downloads).length > 0)) {
-      existingDownloads = new Set<string>(
-        Object.keys(downloads).map(key => downloads[key].localPath));
-    }
-
-    return (getArchives(selectedSource[0], parsedMods) as any)
-      .then((archives: string[]) => Promise.map(archives, archive => {
-        return createModEntry(selectedSource[2], archive, existingDownloads)
-          .then(mod => {
-            progress(mod.modFilename);
-            mods[mod.modFilename] = mod;
-            return Promise.resolve();
-          });
-      })
-        .then(() => mods))
+    const { selectedSource, parsedMods } = this.state;
+    const api = this.context.api;
+    return (generateModEntries(api, selectedSource, parsedMods, cb) as any)
       .catch(err => {
         log('error', 'Failed to create mod entry', err);
         const errorMessage = (err.code === 'EPERM')

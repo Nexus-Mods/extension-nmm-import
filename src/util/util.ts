@@ -2,11 +2,12 @@ import { createHash } from 'crypto';
 import path from 'path';
 import { TFunction } from 'react-i18next';
 import { pathToFileURL } from 'url';
-import { fs, log, util } from 'vortex-api';
+import { fs, log, types, util } from 'vortex-api';
 import * as winapi from 'winapi-bindings';
 
 import { isConfigEmpty } from './nmmVirtualConfigParser';
-import { ICapacityInfo, IModEntry } from '../types/nmmEntries';
+import { ModsCapacityMap, ICapacityInfo } from '../types/capacityTypes';
+import { IModEntry, ModsMap, ProgressCB } from '../types/nmmEntries';
 
 // Doesn't seem to be used any longer, but going to keep it here just in case we need it one day.
 const _LINKS = {
@@ -239,6 +240,42 @@ export async function validate(source: string) {
     nmmModsEnabled: !res,
     nmmRunning,
   });
+}
+
+export async function calculateModsCapacity(modList: IModEntry[], cb: (err: Error, mod: string) => void): Promise<ModsCapacityMap> {
+  const modCapacityInfo: ModsCapacityMap = {};
+  for (const mod of modList) {
+    cb(null, mod.modFilename);
+    try {
+      const archiveSizeBytes = await calculateArchiveSize(mod);
+      modCapacityInfo[mod.modFilename] = archiveSizeBytes;
+    } catch (err) {
+      cb(err, mod.modFilename);
+      modCapacityInfo[mod.modFilename] = 0;
+    }
+  }
+  return Promise.resolve(modCapacityInfo);
+}
+
+export async function generateModEntries(api: types.IExtensionApi,
+                                         source: string[],
+                                         parsedMods: ModsMap,
+                                         cb: ProgressCB): Promise<ModsMap> {
+  const state = api.getState();
+  let existingDownloads: Set<string>;
+  const downloads = util.getSafe(state, ['persistent', 'downloads', 'files'], undefined);
+  if ((downloads !== undefined) && (Object.keys(downloads).length > 0)) {
+    existingDownloads = new Set<string>(
+      Object.keys(downloads).map(key => downloads[key].localPath));
+  }
+  const archives = await getArchives(source[0], parsedMods);
+  const generated: ModsMap = {};
+  for (const archive of archives) {
+    const mod = await createModEntry(source[2], archive, existingDownloads);
+    cb(null, mod.modFilename);
+    generated[mod.modFilename] = mod;
+  }
+  return Promise.resolve(generated);
 }
 
 export function getLocalAssetUrl(fileName: string) {
