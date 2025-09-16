@@ -971,9 +971,17 @@ class ImportDialog extends ComponentEx<IProps, IComponentState> {
         });
     };
 
-    const validateLoop = () => this.canImport()
-      ? startImportProcess()
-      : setTimeout(() => validateLoop(), 2000);
+    const validateLoop = (): Promise<void> => {
+      if (this.canImport()) {
+        return Promise.resolve(startImportProcess());
+      } else {
+        return new Promise<void>((resolve) => {
+          setTimeout(() => {
+            validateLoop().then(resolve);
+          }, 2000);
+        });
+      }
+    };
 
     this.nextState.busy = true;
     return this.revalidate()
